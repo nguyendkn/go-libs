@@ -1,11 +1,17 @@
 package logger
 
 import (
+	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // Logger interface for dependency injection
@@ -25,15 +31,236 @@ type ZapLogger struct {
 	logger *zap.Logger
 }
 
+// TimeRotatingWriter wraps lumberjack.Logger to support time-based rotation
+type TimeRotatingWriter struct {
+	*lumberjack.Logger
+	options           FileOptions
+	currentTimeFormat string
+	lastRotationTime  time.Time
+	mu                sync.Mutex
+	baseFilename      string
+}
+
+// NewTimeRotatingWriter creates a new time-based rotating writer
+func NewTimeRotatingWriter(options FileOptions) *TimeRotatingWriter {
+	// Extract base filename and extension
+	baseFilename := options.Filename
+
+	// Set time format based on interval
+	timeFormat := options.TimeRotationFormat
+	if timeFormat == "" {
+		switch options.TimeRotationInterval {
+		case RotationHourly:
+			timeFormat = "2006-01-02-15"
+		case RotationDaily:
+			timeFormat = "2006-01-02"
+		case RotationWeekly:
+			timeFormat = "2006-W01"
+		case RotationMonthly:
+			timeFormat = "2006-01"
+		default:
+			timeFormat = "2006-01-02"
+		}
+	}
+
+	// Create initial filename with timestamp
+	now := time.Now()
+	if options.LocalTime {
+		now = now.Local()
+	} else {
+		now = now.UTC()
+	}
+
+	timestampedFilename := generateTimestampedFilename(baseFilename, now, timeFormat)
+
+	lj := &lumberjack.Logger{
+		Filename:   timestampedFilename,
+		MaxSize:    options.MaxSize,
+		MaxAge:     options.MaxAge,
+		MaxBackups: options.MaxBackups,
+		LocalTime:  options.LocalTime,
+		Compress:   options.Compress,
+	}
+
+	return &TimeRotatingWriter{
+		Logger:            lj,
+		options:           options,
+		currentTimeFormat: timeFormat,
+		lastRotationTime:  now,
+		baseFilename:      baseFilename,
+	}
+}
+
+// Write implements io.Writer interface with time-based rotation check
+func (w *TimeRotatingWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	now := time.Now()
+	if w.options.LocalTime {
+		now = now.Local()
+	} else {
+		now = now.UTC()
+	}
+
+	// Check if we need to rotate based on time
+	if w.shouldRotateByTime(now) {
+		if err := w.rotateByTime(now); err != nil {
+			return 0, err
+		}
+	}
+
+	return w.Logger.Write(p)
+}
+
+// shouldRotateByTime checks if rotation is needed based on time interval
+func (w *TimeRotatingWriter) shouldRotateByTime(now time.Time) bool {
+	switch w.options.TimeRotationInterval {
+	case RotationHourly:
+		return now.Hour() != w.lastRotationTime.Hour() ||
+			now.Day() != w.lastRotationTime.Day() ||
+			now.Month() != w.lastRotationTime.Month() ||
+			now.Year() != w.lastRotationTime.Year()
+	case RotationDaily:
+		return now.Day() != w.lastRotationTime.Day() ||
+			now.Month() != w.lastRotationTime.Month() ||
+			now.Year() != w.lastRotationTime.Year()
+	case RotationWeekly:
+		_, thisWeek := now.ISOWeek()
+		_, lastWeek := w.lastRotationTime.ISOWeek()
+		return thisWeek != lastWeek || now.Year() != w.lastRotationTime.Year()
+	case RotationMonthly:
+		return now.Month() != w.lastRotationTime.Month() ||
+			now.Year() != w.lastRotationTime.Year()
+	}
+	return false
+}
+
+// rotateByTime performs time-based rotation
+func (w *TimeRotatingWriter) rotateByTime(now time.Time) error {
+	// Close current file
+	if err := w.Logger.Close(); err != nil {
+		return err
+	}
+
+	// Generate new filename with current timestamp
+	newFilename := generateTimestampedFilename(w.baseFilename, now, w.currentTimeFormat)
+
+	// Update lumberjack logger with new filename
+	w.Logger.Filename = newFilename
+	w.lastRotationTime = now
+
+	return nil
+}
+
+// generateTimestampedFilename creates a filename with timestamp
+func generateTimestampedFilename(baseFilename string, t time.Time, timeFormat string) string {
+	dir := filepath.Dir(baseFilename)
+	filename := filepath.Base(baseFilename)
+	ext := filepath.Ext(filename)
+	nameWithoutExt := strings.TrimSuffix(filename, ext)
+
+	timestamp := t.Format(timeFormat)
+	timestampedName := fmt.Sprintf("%s-%s%s", nameWithoutExt, timestamp, ext)
+
+	return filepath.Join(dir, timestampedName)
+}
+
 // Global logger instance
 var globalLogger Logger
 
+// RotationMode defines how log files should be rotated
+type RotationMode string
+
+const (
+	// RotationModeSize rotates based on file size only
+	RotationModeSize RotationMode = "size"
+	// RotationModeTime rotates based on time only
+	RotationModeTime RotationMode = "time"
+	// RotationModeBoth rotates based on both size and time (whichever comes first)
+	RotationModeBoth RotationMode = "both"
+)
+
+// TimeRotationInterval defines the time interval for rotation
+type TimeRotationInterval string
+
+const (
+	// RotationHourly rotates every hour
+	RotationHourly TimeRotationInterval = "hourly"
+	// RotationDaily rotates every day
+	RotationDaily TimeRotationInterval = "daily"
+	// RotationWeekly rotates every week
+	RotationWeekly TimeRotationInterval = "weekly"
+	// RotationMonthly rotates every month
+	RotationMonthly TimeRotationInterval = "monthly"
+)
+
+// FileOptions holds file-specific logging options
+type FileOptions struct {
+	// Filename is the file to write logs to. If empty, logs will only go to stdout
+	Filename string `json:"filename" yaml:"filename"`
+
+	// MaxSize is the maximum size in megabytes of the log file before it gets rotated
+	MaxSize int `json:"max_size" yaml:"max_size"`
+
+	// MaxAge is the maximum number of days to retain old log files
+	MaxAge int `json:"max_age" yaml:"max_age"`
+
+	// MaxBackups is the maximum number of old log files to retain
+	MaxBackups int `json:"max_backups" yaml:"max_backups"`
+
+	// LocalTime determines if the time used for formatting the timestamps in
+	// backup files is the computer's local time. Default is UTC time.
+	LocalTime bool `json:"local_time" yaml:"local_time"`
+
+	// Compress determines if the rotated log files should be compressed using gzip
+	Compress bool `json:"compress" yaml:"compress"`
+
+	// FileMode is the file mode to use when creating log files
+	FileMode os.FileMode `json:"file_mode" yaml:"file_mode"`
+
+	// CreateDir determines if the directory should be created if it doesn't exist
+	CreateDir bool `json:"create_dir" yaml:"create_dir"`
+
+	// RotationMode determines how files should be rotated (size, time, or both)
+	RotationMode RotationMode `json:"rotation_mode" yaml:"rotation_mode"`
+
+	// TimeRotationInterval determines the time interval for rotation when using time-based rotation
+	TimeRotationInterval TimeRotationInterval `json:"time_rotation_interval" yaml:"time_rotation_interval"`
+
+	// TimeRotationFormat is the format string for time-based file naming
+	// Default formats:
+	// - Hourly: "2006-01-02-15"
+	// - Daily: "2006-01-02"
+	// - Weekly: "2006-W01"
+	// - Monthly: "2006-01"
+	TimeRotationFormat string `json:"time_rotation_format" yaml:"time_rotation_format"`
+}
+
 // Config holds logger configuration
 type Config struct {
-	Level       string   `json:"level" yaml:"level"`
-	Environment string   `json:"environment" yaml:"environment"`
-	OutputPaths []string `json:"output_paths" yaml:"output_paths"`
-	Encoding    string   `json:"encoding" yaml:"encoding"`
+	Level       string      `json:"level" yaml:"level"`
+	Environment string      `json:"environment" yaml:"environment"`
+	OutputPaths []string    `json:"output_paths" yaml:"output_paths"`
+	Encoding    string      `json:"encoding" yaml:"encoding"`
+	FileOptions FileOptions `json:"file_options" yaml:"file_options"`
+}
+
+// DefaultFileOptions returns default file options
+func DefaultFileOptions() FileOptions {
+	return FileOptions{
+		Filename:             "",               // Empty means no file output
+		MaxSize:              100,              // 100 MB
+		MaxAge:               30,               // 30 days
+		MaxBackups:           10,               // Keep 10 backup files
+		LocalTime:            false,            // Use UTC time
+		Compress:             true,             // Compress old files
+		FileMode:             0644,             // Standard file permissions
+		CreateDir:            true,             // Create directory if not exists
+		RotationMode:         RotationModeSize, // Default to size-based rotation
+		TimeRotationInterval: RotationDaily,    // Default to daily rotation
+		TimeRotationFormat:   "",               // Will be set based on interval
+	}
 }
 
 // DefaultConfig returns default logger configuration
@@ -43,6 +270,7 @@ func DefaultConfig() Config {
 		Environment: "development",
 		OutputPaths: []string{"stdout"},
 		Encoding:    "console",
+		FileOptions: DefaultFileOptions(),
 	}
 }
 
@@ -88,10 +316,49 @@ func NewLogger(config Config) (Logger, error) {
 
 	// Create writer syncer
 	var writeSyncer zapcore.WriteSyncer
-	if len(config.OutputPaths) == 0 || (len(config.OutputPaths) == 1 && config.OutputPaths[0] == "stdout") {
-		writeSyncer = zapcore.AddSync(os.Stdout)
+
+	// Check if we need file output
+	if config.FileOptions.Filename != "" {
+		// Create directory if needed
+		if config.FileOptions.CreateDir {
+			dir := filepath.Dir(config.FileOptions.Filename)
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return nil, err
+			}
+		}
+
+		var fileWriter io.Writer
+
+		// Choose writer based on rotation mode
+		switch config.FileOptions.RotationMode {
+		case RotationModeTime, RotationModeBoth:
+			// Use time-based rotating writer
+			fileWriter = NewTimeRotatingWriter(config.FileOptions)
+		default:
+			// Use size-based rotating writer (lumberjack)
+			fileWriter = &lumberjack.Logger{
+				Filename:   config.FileOptions.Filename,
+				MaxSize:    config.FileOptions.MaxSize,
+				MaxAge:     config.FileOptions.MaxAge,
+				MaxBackups: config.FileOptions.MaxBackups,
+				LocalTime:  config.FileOptions.LocalTime,
+				Compress:   config.FileOptions.Compress,
+			}
+		}
+
+		// Combine stdout and file output if needed
+		if len(config.OutputPaths) > 0 && config.OutputPaths[0] != "stdout" {
+			// Only file output
+			writeSyncer = zapcore.AddSync(fileWriter)
+		} else {
+			// Both stdout and file output
+			writeSyncer = zapcore.NewMultiWriteSyncer(
+				zapcore.AddSync(os.Stdout),
+				zapcore.AddSync(fileWriter),
+			)
+		}
 	} else {
-		// For file outputs, you might want to add file rotation here
+		// Only stdout output
 		writeSyncer = zapcore.AddSync(os.Stdout)
 	}
 
