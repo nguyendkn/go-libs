@@ -362,7 +362,7 @@ func (c *Converter) convertStreamToHLS(ctx context.Context, streamURL, streamNam
 	// handle live streams differently
 
 	// Create a temporary file to capture the stream
-	tempFile := filepath.Join(outputDir, "temp_capture.mp4")
+	tempFile := filepath.Join(outputDir, fmt.Sprintf("temp_%s_capture.mp4", streamName))
 	defer os.Remove(tempFile)
 
 	// Capture stream for a duration (this is for demo purposes)
