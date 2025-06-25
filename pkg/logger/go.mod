@@ -1,4 +1,4 @@
-module github.com/nguyendkn/go-libs/logger
+module github.com/nguyendkn/go-libs/pkg/logger
 
 go 1.24.4
 
