@@ -4,6 +4,7 @@ use (
 	./hls
 	./httpclient
 	./json
+	./lodash
 	./logger
 	./response
 	./rtsp

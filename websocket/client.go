@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"sync"
@@ -266,7 +267,7 @@ func (c *wsClient) SendText(text string) error {
 }
 
 // SendJSON gửi message JSON
-func (c *wsClient) SendJSON(v interface{}) error {
+func (c *wsClient) SendJSON(v any) error {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Errorf("json marshal failed: %w", err)
@@ -621,10 +622,7 @@ func (c *wsClient) reconnect() {
 	// Calculate backoff delay
 	delay := c.options.ReconnectInterval
 	if c.options.ReconnectBackoff > 0 {
-		backoffMultiplier := time.Duration(attempts)
-		if backoffMultiplier > 10 {
-			backoffMultiplier = 10 // cap at 10x
-		}
+		backoffMultiplier := min(time.Duration(attempts), 10) // cap at 10x
 		delay = c.options.ReconnectInterval + (c.options.ReconnectBackoff * backoffMultiplier)
 	}
 
@@ -661,9 +659,7 @@ func mergeClientOptions(dst, src *ClientOptions) {
 		if dst.Headers == nil {
 			dst.Headers = make(map[string]string)
 		}
-		for k, v := range src.Headers {
-			dst.Headers[k] = v
-		}
+		maps.Copy(dst.Headers, src.Headers)
 	}
 	if src.Subprotocols != nil {
 		dst.Subprotocols = src.Subprotocols

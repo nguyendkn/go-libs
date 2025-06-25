@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -98,12 +99,7 @@ func NewServer(addr string, options ...*ServerOptions) Server {
 				return true // allow all origins by default
 			}
 			origin := r.Header.Get("Origin")
-			for _, allowed := range opts.AllowedOrigins {
-				if origin == allowed {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(opts.AllowedOrigins, origin)
 		}
 	}
 
@@ -205,7 +201,7 @@ func (s *wsServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create server client
-	client := newServerClient(conn, r, authInfo, s.options)
+	client := newServerClient(conn, r, authInfo, s.options, s)
 
 	// Register client with hub
 	s.hub.RegisterClient(client)
@@ -342,7 +338,7 @@ func (s *wsServer) BroadcastText(text string) error {
 	return s.hub.Broadcast(msg)
 }
 
-func (s *wsServer) BroadcastJSON(v interface{}) error {
+func (s *wsServer) BroadcastJSON(v any) error {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Errorf("json marshal failed: %w", err)
@@ -370,7 +366,7 @@ func (s *wsServer) BroadcastToRoomText(room string, text string) error {
 	return s.hub.BroadcastToRoom(room, msg)
 }
 
-func (s *wsServer) BroadcastToRoomJSON(room string, v interface{}) error {
+func (s *wsServer) BroadcastToRoomJSON(room string, v any) error {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Errorf("json marshal failed: %w", err)

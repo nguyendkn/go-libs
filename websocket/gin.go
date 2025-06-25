@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,7 +17,7 @@ func GinWebSocketHandler(server Server) gin.HandlerFunc {
 func GinWebSocketUpgrade(server Server) gin.HandlerFunc {
 	upgrader := server.GetUpgrader()
 	options := server.GetOptions()
-	
+
 	return func(c *gin.Context) {
 		// Authentication check
 		var authInfo *AuthInfo
@@ -28,34 +29,34 @@ func GinWebSocketUpgrade(server Server) gin.HandlerFunc {
 			}
 			authInfo = auth
 		}
-		
+
 		// Upgrade connection
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to upgrade connection"})
 			return
 		}
-		
+
 		// Create server client
-		client := newServerClient(conn, c.Request, authInfo, options)
-		
+		client := newServerClient(conn, c.Request, authInfo, options, nil)
+
 		// Register client with server's hub
 		if wsServer, ok := server.(*wsServer); ok {
 			wsServer.hub.RegisterClient(client)
-			
+
 			// Update metrics
 			wsServer.metricsMu.Lock()
 			wsServer.metrics.TotalConnections++
 			wsServer.metrics.ActiveConnections++
 			wsServer.metricsMu.Unlock()
-			
+
 			// Call connect handler
 			wsServer.handlersMu.RLock()
 			if wsServer.onConnect != nil {
 				go wsServer.onConnect(client)
 			}
 			wsServer.handlersMu.RUnlock()
-			
+
 			// Start client goroutines
 			go wsServer.handleClient(client)
 		}
@@ -70,7 +71,7 @@ func GinWebSocketMiddleware(server Server) gin.HandlerFunc {
 			GinWebSocketUpgrade(server)(c)
 			return
 		}
-		
+
 		c.Next()
 	}
 }
@@ -79,7 +80,7 @@ func GinWebSocketMiddleware(server Server) gin.HandlerFunc {
 func GinCORSMiddleware(allowedOrigins []string, allowedHeaders []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
-		
+
 		// Check allowed origins
 		if len(allowedOrigins) > 0 {
 			allowed := false
@@ -94,11 +95,11 @@ func GinCORSMiddleware(allowedOrigins []string, allowedHeaders []string) gin.Han
 				return
 			}
 		}
-		
+
 		// Set CORS headers
 		c.Header("Access-Control-Allow-Origin", origin)
 		c.Header("Access-Control-Allow-Credentials", "true")
-		
+
 		if len(allowedHeaders) > 0 {
 			headers := ""
 			for i, header := range allowedHeaders {
@@ -111,15 +112,15 @@ func GinCORSMiddleware(allowedOrigins []string, allowedHeaders []string) gin.Han
 		} else {
 			c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
 		}
-		
+
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		
+
 		// Handle preflight requests
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
-		
+
 		c.Next()
 	}
 }
@@ -128,12 +129,12 @@ func GinCORSMiddleware(allowedOrigins []string, allowedHeaders []string) gin.Han
 func GinRateLimitMiddleware(rateLimiter RateLimiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		clientID := getClientIDFromContext(c)
-		
+
 		if !rateLimiter.Allow(clientID) {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Rate limit exceeded"})
 			return
 		}
-		
+
 		c.Next()
 	}
 }
@@ -146,13 +147,13 @@ func GinAuthMiddleware(authenticator Authenticator) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication failed"})
 			return
 		}
-		
+
 		// Store auth info in context
 		c.Set("auth", authInfo)
 		c.Set("user_id", authInfo.UserID)
 		c.Set("username", authInfo.Username)
 		c.Set("roles", authInfo.Roles)
-		
+
 		c.Next()
 	}
 }
@@ -181,7 +182,7 @@ func GinMetricsHandler(server Server) gin.HandlerFunc {
 func GinHealthHandler(server Server) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		health := server.GetHealth()
-		
+
 		var statusCode int
 		switch health.Status {
 		case "healthy":
@@ -193,7 +194,7 @@ func GinHealthHandler(server Server) gin.HandlerFunc {
 		default:
 			statusCode = http.StatusInternalServerError
 		}
-		
+
 		c.JSON(statusCode, health)
 	}
 }
@@ -203,12 +204,12 @@ func GinWebSocketRoutes(router *gin.Engine, server Server, basePath string) {
 	if basePath == "" {
 		basePath = "/ws"
 	}
-	
+
 	wsGroup := router.Group(basePath)
-	
+
 	// WebSocket upgrade endpoint
 	wsGroup.GET("/", GinWebSocketUpgrade(server))
-	
+
 	// Metrics endpoint (if enabled)
 	if server.GetOptions().EnableMetrics {
 		metricsPath := server.GetOptions().MetricsPath
@@ -217,7 +218,7 @@ func GinWebSocketRoutes(router *gin.Engine, server Server, basePath string) {
 		}
 		wsGroup.GET(metricsPath, GinMetricsHandler(server))
 	}
-	
+
 	// Health check endpoint
 	wsGroup.GET("/health", GinHealthHandler(server))
 }
@@ -232,19 +233,19 @@ type GinWebSocketServer struct {
 func NewGinWebSocketServer(addr string, options *ServerOptions) *GinWebSocketServer {
 	server := NewServer(addr, options)
 	router := gin.New()
-	
+
 	// Add default middleware
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
-	
+
 	// Add CORS middleware if origins are specified
 	if options != nil && len(options.AllowedOrigins) > 0 {
 		router.Use(GinCORSMiddleware(options.AllowedOrigins, options.AllowedHeaders))
 	}
-	
+
 	// Setup WebSocket routes
 	GinWebSocketRoutes(router, server, options.Path)
-	
+
 	return &GinWebSocketServer{
 		Server: server,
 		router: router,
@@ -272,7 +273,7 @@ func (s *GinWebSocketServer) StartGin() error {
 	if err := s.Server.(*wsServer).hub.Start(); err != nil {
 		return err
 	}
-	
+
 	// Start Gin server
 	return s.router.Run(s.Server.GetOptions().Addr)
 }
@@ -287,7 +288,7 @@ func getClientIDFromContext(c *gin.Context) string {
 			return auth.UserID
 		}
 	}
-	
+
 	// Fall back to IP address
 	return c.ClientIP()
 }
@@ -338,13 +339,8 @@ func HasRole(c *gin.Context, role string) bool {
 	if !exists {
 		return false
 	}
-	
-	for _, r := range roles {
-		if r == role {
-			return true
-		}
-	}
-	return false
+
+	return slices.Contains(roles, role)
 }
 
 // RequireRole tạo middleware yêu cầu role cụ thể
@@ -368,7 +364,7 @@ func RequireAnyRole(roles ...string) gin.HandlerFunc {
 				break
 			}
 		}
-		
+
 		if !hasRole {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
 			return

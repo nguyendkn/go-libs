@@ -15,56 +15,56 @@ type MetricsCollector struct {
 	totalConnections    int64
 	activeConnections   int64
 	totalDisconnections int64
-	
+
 	// Message metrics
-	totalMessages       int64
-	totalBytes          int64
-	messagesPerSecond   int64
-	bytesPerSecond      int64
-	
+	totalMessages     int64
+	totalBytes        int64
+	messagesPerSecond int64
+	bytesPerSecond    int64
+
 	// Error metrics
-	totalErrors         int64
-	connectionErrors    int64
-	messageErrors       int64
-	authErrors          int64
-	
+	totalErrors      int64
+	connectionErrors int64
+	messageErrors    int64
+	authErrors       int64
+
 	// Performance metrics
-	averageLatency      int64 // in microseconds
-	maxLatency          int64
-	minLatency          int64
-	latencyCount        int64
-	
+	averageLatency int64 // in microseconds
+	maxLatency     int64
+	minLatency     int64
+	latencyCount   int64
+
 	// Room metrics
-	totalRooms          int64
-	activeRooms         int64
-	
+	totalRooms  int64
+	activeRooms int64
+
 	// Rate limiting metrics
-	rateLimitHits       int64
-	
+	rateLimitHits int64
+
 	// Timing
-	startTime           time.Time
-	lastReset           time.Time
-	
+	startTime time.Time
+	lastReset time.Time
+
 	// Mutex for complex operations
 	mu sync.RWMutex
-	
+
 	// Historical data
-	history []MetricsSnapshot
+	history        []MetricsSnapshot
 	maxHistorySize int
 }
 
 // MetricsSnapshot lưu trữ snapshot của metrics tại một thời điểm
 type MetricsSnapshot struct {
-	Timestamp           time.Time `json:"timestamp"`
-	TotalConnections    int64     `json:"total_connections"`
-	ActiveConnections   int64     `json:"active_connections"`
-	TotalMessages       int64     `json:"total_messages"`
-	TotalBytes          int64     `json:"total_bytes"`
-	MessagesPerSecond   float64   `json:"messages_per_second"`
-	BytesPerSecond      float64   `json:"bytes_per_second"`
-	AverageLatency      float64   `json:"average_latency_ms"`
-	ErrorRate           float64   `json:"error_rate"`
-	ActiveRooms         int64     `json:"active_rooms"`
+	Timestamp         time.Time `json:"timestamp"`
+	TotalConnections  int64     `json:"total_connections"`
+	ActiveConnections int64     `json:"active_connections"`
+	TotalMessages     int64     `json:"total_messages"`
+	TotalBytes        int64     `json:"total_bytes"`
+	MessagesPerSecond float64   `json:"messages_per_second"`
+	BytesPerSecond    float64   `json:"bytes_per_second"`
+	AverageLatency    float64   `json:"average_latency_ms"`
+	ErrorRate         float64   `json:"error_rate"`
+	ActiveRooms       int64     `json:"active_rooms"`
 }
 
 // NewMetricsCollector tạo một metrics collector mới
@@ -138,13 +138,13 @@ func (mc *MetricsCollector) IncrementRateLimitHits() {
 // Latency metrics
 func (mc *MetricsCollector) RecordLatency(latency time.Duration) {
 	latencyMicros := latency.Microseconds()
-	
+
 	// Update average
 	count := atomic.AddInt64(&mc.latencyCount, 1)
 	currentAvg := atomic.LoadInt64(&mc.averageLatency)
 	newAvg := (currentAvg*(count-1) + latencyMicros) / count
 	atomic.StoreInt64(&mc.averageLatency, newAvg)
-	
+
 	// Update max
 	for {
 		currentMax := atomic.LoadInt64(&mc.maxLatency)
@@ -155,7 +155,7 @@ func (mc *MetricsCollector) RecordLatency(latency time.Duration) {
 			break
 		}
 	}
-	
+
 	// Update min
 	for {
 		currentMin := atomic.LoadInt64(&mc.minLatency)
@@ -171,7 +171,7 @@ func (mc *MetricsCollector) RecordLatency(latency time.Duration) {
 // Room metrics
 func (mc *MetricsCollector) SetActiveRooms(count int64) {
 	atomic.StoreInt64(&mc.activeRooms, count)
-	
+
 	// Update total rooms if current is higher
 	for {
 		currentTotal := atomic.LoadInt64(&mc.totalRooms)
@@ -188,7 +188,7 @@ func (mc *MetricsCollector) SetActiveRooms(count int64) {
 func (mc *MetricsCollector) GetSnapshot() MetricsSnapshot {
 	now := time.Now()
 	duration := now.Sub(mc.lastReset).Seconds()
-	
+
 	snapshot := MetricsSnapshot{
 		Timestamp:         now,
 		TotalConnections:  atomic.LoadInt64(&mc.totalConnections),
@@ -197,23 +197,23 @@ func (mc *MetricsCollector) GetSnapshot() MetricsSnapshot {
 		TotalBytes:        atomic.LoadInt64(&mc.totalBytes),
 		ActiveRooms:       atomic.LoadInt64(&mc.activeRooms),
 	}
-	
+
 	// Calculate rates
 	if duration > 0 {
 		snapshot.MessagesPerSecond = float64(snapshot.TotalMessages) / duration
 		snapshot.BytesPerSecond = float64(snapshot.TotalBytes) / duration
 	}
-	
+
 	// Calculate latency
 	avgLatencyMicros := atomic.LoadInt64(&mc.averageLatency)
 	snapshot.AverageLatency = float64(avgLatencyMicros) / 1000.0 // Convert to milliseconds
-	
+
 	// Calculate error rate
 	totalErrors := atomic.LoadInt64(&mc.totalErrors)
 	if snapshot.TotalMessages > 0 {
 		snapshot.ErrorRate = float64(totalErrors) / float64(snapshot.TotalMessages) * 100
 	}
-	
+
 	return snapshot
 }
 
@@ -221,7 +221,7 @@ func (mc *MetricsCollector) GetSnapshot() MetricsSnapshot {
 func (mc *MetricsCollector) AddSnapshot(snapshot MetricsSnapshot) {
 	mc.mu.Lock()
 	mc.history = append(mc.history, snapshot)
-	
+
 	// Keep only the last N snapshots
 	if len(mc.history) > mc.maxHistorySize {
 		mc.history = mc.history[len(mc.history)-mc.maxHistorySize:]
@@ -233,15 +233,15 @@ func (mc *MetricsCollector) AddSnapshot(snapshot MetricsSnapshot) {
 func (mc *MetricsCollector) GetHistory(limit int) []MetricsSnapshot {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	
+
 	if limit <= 0 || limit > len(mc.history) {
 		limit = len(mc.history)
 	}
-	
+
 	start := len(mc.history) - limit
 	history := make([]MetricsSnapshot, limit)
 	copy(history, mc.history[start:])
-	
+
 	return history
 }
 
@@ -261,9 +261,9 @@ func (mc *MetricsCollector) Reset() {
 	atomic.StoreInt64(&mc.minLatency, int64(^uint64(0)>>1))
 	atomic.StoreInt64(&mc.latencyCount, 0)
 	atomic.StoreInt64(&mc.totalRooms, 0)
-	
+
 	mc.lastReset = time.Now()
-	
+
 	mc.mu.Lock()
 	mc.history = mc.history[:0]
 	mc.mu.Unlock()
@@ -282,12 +282,12 @@ type HealthChecker struct {
 
 // HealthCheck định nghĩa một health check
 type HealthCheck struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	CheckFunc   func() (bool, string)  `json:"-"`
-	LastCheck   time.Time              `json:"last_check"`
-	LastResult  bool                   `json:"last_result"`
-	LastMessage string                 `json:"last_message"`
+	Name        string                `json:"name"`
+	Description string                `json:"description"`
+	CheckFunc   func() (bool, string) `json:"-"`
+	LastCheck   time.Time             `json:"last_check"`
+	LastResult  bool                  `json:"last_result"`
+	LastMessage string                `json:"last_message"`
 }
 
 // NewHealthChecker tạo một health checker mới
@@ -312,41 +312,41 @@ func (hc *HealthChecker) AddCheck(name, description string, checkFunc func() (bo
 func (hc *HealthChecker) RunChecks() map[string]HealthCheck {
 	hc.mu.Lock()
 	defer hc.mu.Unlock()
-	
+
 	results := make(map[string]HealthCheck)
-	
+
 	for name, check := range hc.checks {
 		result, message := check.CheckFunc()
-		
+
 		check.LastCheck = time.Now()
 		check.LastResult = result
 		check.LastMessage = message
-		
+
 		hc.checks[name] = check
 		results[name] = check
 	}
-	
+
 	return results
 }
 
 // GetOverallHealth trả về overall health status
 func (hc *HealthChecker) GetOverallHealth() (bool, string) {
 	checks := hc.RunChecks()
-	
+
 	healthy := true
 	var issues []string
-	
+
 	for _, check := range checks {
 		if !check.LastResult {
 			healthy = false
 			issues = append(issues, fmt.Sprintf("%s: %s", check.Name, check.LastMessage))
 		}
 	}
-	
+
 	if healthy {
 		return true, "All checks passed"
 	}
-	
+
 	return false, fmt.Sprintf("Failed checks: %v", issues)
 }
 
@@ -363,18 +363,18 @@ func NewMonitoringServer(addr string, metricsCollector *MetricsCollector, health
 		metricsCollector: metricsCollector,
 		healthChecker:    healthChecker,
 	}
-	
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metrics", ms.handleMetrics)
 	mux.HandleFunc("/health", ms.handleHealth)
 	mux.HandleFunc("/metrics/history", ms.handleMetricsHistory)
 	mux.HandleFunc("/metrics/reset", ms.handleMetricsReset)
-	
+
 	ms.server = &http.Server{
 		Addr:    addr,
 		Handler: mux,
 	}
-	
+
 	return ms
 }
 
@@ -391,7 +391,7 @@ func (ms *MonitoringServer) Stop() error {
 // handleMetrics xử lý metrics endpoint
 func (ms *MonitoringServer) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	snapshot := ms.metricsCollector.GetSnapshot()
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(snapshot)
 }
@@ -399,22 +399,22 @@ func (ms *MonitoringServer) handleMetrics(w http.ResponseWriter, r *http.Request
 // handleHealth xử lý health endpoint
 func (ms *MonitoringServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	healthy, message := ms.healthChecker.GetOverallHealth()
-	
+
 	status := map[string]interface{}{
 		"healthy":   healthy,
 		"message":   message,
 		"timestamp": time.Now(),
 		"uptime":    ms.metricsCollector.GetUptime().Seconds(),
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	if healthy {
 		w.WriteHeader(http.StatusOK)
 	} else {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
-	
+
 	json.NewEncoder(w).Encode(status)
 }
 
@@ -426,9 +426,9 @@ func (ms *MonitoringServer) handleMetricsHistory(w http.ResponseWriter, r *http.
 			limit = 100
 		}
 	}
-	
+
 	history := ms.metricsCollector.GetHistory(limit)
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(history)
 }
@@ -439,9 +439,9 @@ func (ms *MonitoringServer) handleMetricsReset(w http.ResponseWriter, r *http.Re
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	
+
 	ms.metricsCollector.Reset()
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"status":  "success",

@@ -22,6 +22,7 @@ type serverClient struct {
 	metrics *ConnectionMetrics
 	auth    *AuthInfo
 	options *ServerOptions
+	server  *wsServer // Reference to server for callbacks
 
 	// State
 	state int32 // atomic, ConnectionState
@@ -29,7 +30,7 @@ type serverClient struct {
 	// Context and data
 	ctx    context.Context
 	cancel context.CancelFunc
-	data   map[string]interface{}
+	data   map[string]any
 	dataMu sync.RWMutex
 
 	// Channels
@@ -52,7 +53,7 @@ type serverClient struct {
 }
 
 // newServerClient tạo một server client mới
-func newServerClient(conn *websocket.Conn, req *http.Request, auth *AuthInfo, options *ServerOptions) *serverClient {
+func newServerClient(conn *websocket.Conn, req *http.Request, auth *AuthInfo, options *ServerOptions, server *wsServer) *serverClient {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client := &serverClient{
@@ -60,9 +61,10 @@ func newServerClient(conn *websocket.Conn, req *http.Request, auth *AuthInfo, op
 		conn:    conn,
 		auth:    auth,
 		options: options,
+		server:  server,
 		ctx:     ctx,
 		cancel:  cancel,
-		data:    make(map[string]interface{}),
+		data:    make(map[string]any),
 		sendCh:  make(chan *Message, options.MessageQueueSize),
 		closeCh: make(chan struct{}),
 		rooms:   make(map[string]bool),
@@ -125,7 +127,7 @@ func (c *serverClient) SendText(text string) error {
 	return c.SendWithType(TextMessage, []byte(text))
 }
 
-func (c *serverClient) SendJSON(v interface{}) error {
+func (c *serverClient) SendJSON(v any) error {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Errorf("json marshal failed: %w", err)
@@ -176,6 +178,11 @@ func (c *serverClient) JoinRoom(room string) error {
 	c.info.Rooms = rooms
 	c.roomsMu.Unlock()
 
+	// Notify server about room join
+	if c.server != nil {
+		c.server.handleRoomJoin(c, room)
+	}
+
 	return nil
 }
 
@@ -188,6 +195,11 @@ func (c *serverClient) LeaveRoom(room string) error {
 	}
 	c.info.Rooms = rooms
 	c.roomsMu.Unlock()
+
+	// Notify server about room leave
+	if c.server != nil {
+		c.server.handleRoomLeave(c, room)
+	}
 
 	return nil
 }
@@ -286,13 +298,13 @@ func (c *serverClient) SetContext(ctx context.Context) {
 }
 
 // Custom data methods
-func (c *serverClient) Set(key string, value interface{}) {
+func (c *serverClient) Set(key string, value any) {
 	c.dataMu.Lock()
 	c.data[key] = value
 	c.dataMu.Unlock()
 }
 
-func (c *serverClient) Get(key string) (interface{}, bool) {
+func (c *serverClient) Get(key string) (any, bool) {
 	c.dataMu.RLock()
 	value, exists := c.data[key]
 	c.dataMu.RUnlock()

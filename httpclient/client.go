@@ -8,10 +8,12 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"maps"
 	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -429,9 +431,7 @@ func (c *httpClient) SetHeaders(headers map[string]string) Client {
 	if c.config.Headers == nil {
 		c.config.Headers = make(map[string]string)
 	}
-	for key, value := range headers {
-		c.config.Headers[key] = value
-	}
+	maps.Copy(c.config.Headers, headers)
 	return c
 }
 
@@ -541,11 +541,7 @@ func (c *httpClient) shouldRetry(req *Request, resp *Response, err error) bool {
 
 	// Check retryable status codes
 	if resp != nil {
-		for _, status := range req.RetryPolicy.RetryableStatus {
-			if resp.StatusCode == status {
-				return true
-			}
-		}
+		return slices.Contains(req.RetryPolicy.RetryableStatus, resp.StatusCode)
 	}
 
 	return false
