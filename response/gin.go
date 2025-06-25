@@ -5,6 +5,8 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/nguyendkn/go-libs/logger"
+	"go.uber.org/zap"
 )
 
 // Gin Integration Helpers
@@ -48,32 +50,29 @@ func NoContentJSON(c *gin.Context, message string) {
 func ErrorJSON(c *gin.Context, code int, message string, err error) {
 	response := Error(code, message, err)
 
-	// Log the error with context
-	logFields := []interface{}{
-		"method", c.Request.Method,
-		"path", c.Request.URL.Path,
-		"status", code,
-		"message", message,
+	// Log the error with context using logger package
+	logFields := []zap.Field{
+		zap.String("method", c.Request.Method),
+		zap.String("path", c.Request.URL.Path),
+		zap.Int("status", code),
+		zap.String("message", message),
 	}
 
 	if requestID := c.GetString("request_id"); requestID != "" {
-		logFields = append(logFields, "request_id", requestID)
+		logFields = append(logFields, zap.String("request_id", requestID))
 	}
 
 	if err != nil {
-		logFields = append(logFields, "error", err.Error())
+		logFields = append(logFields, zap.Error(err))
 	}
 
 	// Log based on error type
 	if code >= 500 {
 		// Server errors - log as error
-		if err != nil {
-			// Use structured logging if logger package is available
-			// logger.Error(message, logger.String("method", c.Request.Method), logger.String("path", c.Request.URL.Path), logger.Int("status", code), logger.Err(err))
-		}
+		logger.GetLogger().Error("API error response", logFields...)
 	} else if code >= 400 {
 		// Client errors - log as warning
-		// logger.Warn(message, logger.String("method", c.Request.Method), logger.String("path", c.Request.URL.Path), logger.Int("status", code))
+		logger.GetLogger().Warn("API error response", logFields...)
 	}
 
 	JSON(c, code, response)
