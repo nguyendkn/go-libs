@@ -4,5 +4,6 @@ use (
 	./hls
 	./logger
 	./response
+	./rtsp
 	./uuid
 )
