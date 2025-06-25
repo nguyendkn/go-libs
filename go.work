@@ -1,3 +1,6 @@
 go 1.24.4
 
-use ./logger
+use (
+	./logger
+	./response
+)

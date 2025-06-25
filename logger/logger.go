@@ -239,7 +239,7 @@ func Bool(key string, val bool) zap.Field {
 }
 
 // Any creates a field with any value
-func Any(key string, val interface{}) zap.Field {
+func Any(key string, val any) zap.Field {
 	return zap.Any(key, val)
 }
 
@@ -249,6 +249,6 @@ func Err(err error) zap.Field {
 }
 
 // Duration creates a duration field
-func Duration(key string, val interface{}) zap.Field {
+func Duration(key string, val any) zap.Field {
 	return zap.Any(key, val)
 }

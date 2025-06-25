@@ -139,7 +139,7 @@ func ErrorLogger() gin.HandlerFunc {
 
 // RecoveryLogger middleware recovers from panics and logs them
 func RecoveryLogger() gin.HandlerFunc {
-	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
+	return gin.CustomRecovery(func(c *gin.Context, recovered any) {
 		fields := []zap.Field{
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
