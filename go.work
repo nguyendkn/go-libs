@@ -6,4 +6,6 @@ use (
 	./response
 	./rtsp
 	./uuid
+	./webrtc
+	./websocket
 )
