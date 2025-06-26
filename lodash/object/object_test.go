@@ -181,9 +181,9 @@ func TestSet(t *testing.T) {
 			success: true,
 		},
 		{
-			name: "set simple value",
-			obj:  make(map[string]interface{}),
-			path: "a",
+			name:  "set simple value",
+			obj:   make(map[string]interface{}),
+			path:  "a",
 			value: 1,
 			expected: map[string]interface{}{
 				"a": 1,
@@ -200,43 +200,6 @@ func TestSet(t *testing.T) {
 			}
 			if success && !reflect.DeepEqual(tt.obj, tt.expected) {
 				t.Errorf("Set() result = %v, want %v", tt.obj, tt.expected)
-			}
-		})
-	}
-}
-
-func TestPick(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    map[string]int
-		keys     []string
-		expected map[string]int
-	}{
-		{
-			name:     "pick existing keys",
-			input:    map[string]int{"a": 1, "b": 2, "c": 3},
-			keys:     []string{"a", "c"},
-			expected: map[string]int{"a": 1, "c": 3},
-		},
-		{
-			name:     "pick non-existing keys",
-			input:    map[string]int{"a": 1, "b": 2},
-			keys:     []string{"c", "d"},
-			expected: map[string]int{},
-		},
-		{
-			name:     "pick mixed keys",
-			input:    map[string]int{"a": 1, "b": 2, "c": 3},
-			keys:     []string{"a", "d"},
-			expected: map[string]int{"a": 1},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := Pick(tt.input, tt.keys)
-			if !reflect.DeepEqual(result, tt.expected) {
-				t.Errorf("Pick() = %v, want %v", result, tt.expected)
 			}
 		})
 	}
@@ -437,6 +400,292 @@ func TestMapValues(t *testing.T) {
 	}
 }
 
+func TestClone(t *testing.T) {
+	t.Run("clone map", func(t *testing.T) {
+		original := map[string]int{"a": 1, "b": 2}
+		cloned := Clone(original)
+
+		// Should be equal but different instances
+		if !reflect.DeepEqual(original, cloned) {
+			t.Errorf("Clone() = %v, want %v", cloned, original)
+		}
+
+		// Modify original to ensure they're separate
+		original["c"] = 3
+		if len(cloned) != 2 {
+			t.Errorf("Clone() should create separate instance, cloned map was affected")
+		}
+	})
+
+	t.Run("clone slice", func(t *testing.T) {
+		original := []int{1, 2, 3}
+		cloned := Clone(original)
+
+		// Should be equal but different instances
+		if !reflect.DeepEqual(original, cloned) {
+			t.Errorf("Clone() = %v, want %v", cloned, original)
+		}
+
+		// Modify original to ensure they're separate
+		original[0] = 99
+		if cloned[0] != 1 {
+			t.Errorf("Clone() should create separate instance, cloned slice was affected")
+		}
+	})
+
+	t.Run("clone array", func(t *testing.T) {
+		original := [3]int{1, 2, 3}
+		cloned := Clone(original)
+
+		// Should be equal but different instances
+		if !reflect.DeepEqual(original, cloned) {
+			t.Errorf("Clone() = %v, want %v", cloned, original)
+		}
+
+		// Modify original to ensure they're separate
+		original[0] = 99
+		if cloned[0] != 1 {
+			t.Errorf("Clone() should create separate instance, cloned array was affected")
+		}
+	})
+
+	t.Run("clone nil map", func(t *testing.T) {
+		var original map[string]int
+		cloned := Clone(original)
+
+		if cloned != nil {
+			t.Errorf("Clone() of nil map should be nil, got %v", cloned)
+		}
+	})
+
+	t.Run("clone primitive", func(t *testing.T) {
+		original := 42
+		cloned := Clone(original)
+
+		if cloned != original {
+			t.Errorf("Clone() = %v, want %v", cloned, original)
+		}
+	})
+}
+
+func TestCloneDeep(t *testing.T) {
+	t.Run("clone deep nested map", func(t *testing.T) {
+		original := map[string]interface{}{
+			"a": 1,
+			"b": map[string]interface{}{
+				"c": 2,
+				"d": map[string]interface{}{
+					"e": 3,
+				},
+			},
+		}
+		cloned := CloneDeep(original)
+
+		// Should be equal but different instances
+		if !reflect.DeepEqual(original, cloned) {
+			t.Errorf("CloneDeep() = %v, want %v", cloned, original)
+		}
+
+		// Modify nested value in original
+		original["b"].(map[string]interface{})["c"] = 99
+
+		// Cloned should not be affected
+		if cloned["b"].(map[string]interface{})["c"] != 2 {
+			t.Errorf("CloneDeep() should create deep copy, nested value was affected")
+		}
+	})
+
+	t.Run("clone deep nested slice", func(t *testing.T) {
+		original := [][]int{{1, 2}, {3, 4}}
+		cloned := CloneDeep(original)
+
+		// Should be equal but different instances
+		if !reflect.DeepEqual(original, cloned) {
+			t.Errorf("CloneDeep() = %v, want %v", cloned, original)
+		}
+
+		// Modify nested value in original
+		original[0][0] = 99
+
+		// Cloned should not be affected
+		if cloned[0][0] != 1 {
+			t.Errorf("CloneDeep() should create deep copy, nested slice was affected")
+		}
+	})
+
+	t.Run("clone deep struct", func(t *testing.T) {
+		type Inner struct {
+			Value int
+		}
+		type Outer struct {
+			Name  string
+			Inner Inner
+		}
+
+		original := Outer{
+			Name:  "test",
+			Inner: Inner{Value: 42},
+		}
+		cloned := CloneDeep(original)
+
+		// Should be equal but different instances
+		if !reflect.DeepEqual(original, cloned) {
+			t.Errorf("CloneDeep() = %v, want %v", cloned, original)
+		}
+
+		// Modify original
+		original.Inner.Value = 99
+
+		// Cloned should not be affected
+		if cloned.Inner.Value != 42 {
+			t.Errorf("CloneDeep() should create deep copy, nested struct was affected")
+		}
+	})
+
+	t.Run("clone deep with pointer", func(t *testing.T) {
+		value := 42
+		original := &value
+		cloned := CloneDeep(original)
+
+		// Should point to different memory locations
+		if original == cloned {
+			t.Errorf("CloneDeep() should create new pointer instance")
+		}
+
+		// But values should be equal
+		if *original != *cloned {
+			t.Errorf("CloneDeep() = %v, want %v", *cloned, *original)
+		}
+
+		// Modify original value
+		*original = 99
+
+		// Cloned should not be affected
+		if *cloned != 42 {
+			t.Errorf("CloneDeep() should create deep copy, pointer value was affected")
+		}
+	})
+
+	t.Run("clone deep nil values", func(t *testing.T) {
+		var original map[string]interface{}
+		cloned := CloneDeep(original)
+
+		if cloned != nil {
+			t.Errorf("CloneDeep() of nil map should be nil, got %v", cloned)
+		}
+	})
+}
+
+func TestPick(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]int
+		keys     []string
+		expected map[string]int
+	}{
+		{
+			name:     "pick existing keys",
+			input:    map[string]int{"a": 1, "b": 2, "c": 3},
+			keys:     []string{"a", "c"},
+			expected: map[string]int{"a": 1, "c": 3},
+		},
+		{
+			name:     "pick non-existing keys",
+			input:    map[string]int{"a": 1, "b": 2},
+			keys:     []string{"c", "d"},
+			expected: map[string]int{},
+		},
+		{
+			name:     "pick mixed existing and non-existing keys",
+			input:    map[string]int{"a": 1, "b": 2, "c": 3},
+			keys:     []string{"a", "d", "c"},
+			expected: map[string]int{"a": 1, "c": 3},
+		},
+		{
+			name:     "pick all keys",
+			input:    map[string]int{"a": 1, "b": 2},
+			keys:     []string{"a", "b"},
+			expected: map[string]int{"a": 1, "b": 2},
+		},
+		{
+			name:     "pick no keys",
+			input:    map[string]int{"a": 1, "b": 2},
+			keys:     []string{},
+			expected: map[string]int{},
+		},
+		{
+			name:     "empty map",
+			input:    map[string]int{},
+			keys:     []string{"a", "b"},
+			expected: map[string]int{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := Pick(tt.input, tt.keys)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("Pick() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestPickBy(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     map[string]int
+		predicate func(int, string) bool
+		expected  map[string]int
+	}{
+		{
+			name:      "pick by value greater than 1",
+			input:     map[string]int{"a": 1, "b": 2, "c": 3},
+			predicate: func(v int, k string) bool { return v > 1 },
+			expected:  map[string]int{"b": 2, "c": 3},
+		},
+		{
+			name:      "pick by key length",
+			input:     map[string]int{"a": 1, "bb": 2, "ccc": 3},
+			predicate: func(v int, k string) bool { return len(k) > 1 },
+			expected:  map[string]int{"bb": 2, "ccc": 3},
+		},
+		{
+			name:      "pick even values",
+			input:     map[string]int{"a": 1, "b": 2, "c": 3, "d": 4},
+			predicate: func(v int, k string) bool { return v%2 == 0 },
+			expected:  map[string]int{"b": 2, "d": 4},
+		},
+		{
+			name:      "pick none",
+			input:     map[string]int{"a": 1, "b": 2, "c": 3},
+			predicate: func(v int, k string) bool { return v > 10 },
+			expected:  map[string]int{},
+		},
+		{
+			name:      "pick all",
+			input:     map[string]int{"a": 1, "b": 2},
+			predicate: func(v int, k string) bool { return true },
+			expected:  map[string]int{"a": 1, "b": 2},
+		},
+		{
+			name:      "empty map",
+			input:     map[string]int{},
+			predicate: func(v int, k string) bool { return true },
+			expected:  map[string]int{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := PickBy(tt.input, tt.predicate)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("PickBy() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestIsEmpty(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -444,24 +693,9 @@ func TestIsEmpty(t *testing.T) {
 		expected bool
 	}{
 		{
-			name:     "empty map",
-			input:    map[string]int{},
+			name:     "nil value",
+			input:    nil,
 			expected: true,
-		},
-		{
-			name:     "non-empty map",
-			input:    map[string]int{"a": 1},
-			expected: false,
-		},
-		{
-			name:     "empty slice",
-			input:    []int{},
-			expected: true,
-		},
-		{
-			name:     "non-empty slice",
-			input:    []int{1},
-			expected: false,
 		},
 		{
 			name:     "empty string",
@@ -474,9 +708,54 @@ func TestIsEmpty(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "nil",
-			input:    nil,
+			name:     "empty slice",
+			input:    []int{},
 			expected: true,
+		},
+		{
+			name:     "non-empty slice",
+			input:    []int{1, 2, 3},
+			expected: false,
+		},
+		{
+			name:     "empty map",
+			input:    map[string]int{},
+			expected: true,
+		},
+		{
+			name:     "non-empty map",
+			input:    map[string]int{"a": 1},
+			expected: false,
+		},
+		{
+			name:     "zero int",
+			input:    0,
+			expected: true,
+		},
+		{
+			name:     "non-zero int",
+			input:    42,
+			expected: false,
+		},
+		{
+			name:     "false bool",
+			input:    false,
+			expected: true,
+		},
+		{
+			name:     "true bool",
+			input:    true,
+			expected: false,
+		},
+		{
+			name:     "zero float",
+			input:    0.0,
+			expected: true,
+		},
+		{
+			name:     "non-zero float",
+			input:    3.14,
+			expected: false,
 		},
 	}
 
@@ -485,6 +764,109 @@ func TestIsEmpty(t *testing.T) {
 			result := IsEmpty(tt.input)
 			if result != tt.expected {
 				t.Errorf("IsEmpty() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsEqual(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        interface{}
+		b        interface{}
+		expected bool
+	}{
+		{
+			name:     "equal integers",
+			a:        42,
+			b:        42,
+			expected: true,
+		},
+		{
+			name:     "different integers",
+			a:        42,
+			b:        43,
+			expected: false,
+		},
+		{
+			name:     "equal strings",
+			a:        "hello",
+			b:        "hello",
+			expected: true,
+		},
+		{
+			name:     "different strings",
+			a:        "hello",
+			b:        "world",
+			expected: false,
+		},
+		{
+			name:     "equal slices",
+			a:        []int{1, 2, 3},
+			b:        []int{1, 2, 3},
+			expected: true,
+		},
+		{
+			name:     "different slices",
+			a:        []int{1, 2, 3},
+			b:        []int{1, 2, 4},
+			expected: false,
+		},
+		{
+			name:     "different slice lengths",
+			a:        []int{1, 2},
+			b:        []int{1, 2, 3},
+			expected: false,
+		},
+		{
+			name:     "equal maps",
+			a:        map[string]int{"a": 1, "b": 2},
+			b:        map[string]int{"a": 1, "b": 2},
+			expected: true,
+		},
+		{
+			name:     "different maps",
+			a:        map[string]int{"a": 1, "b": 2},
+			b:        map[string]int{"a": 1, "b": 3},
+			expected: false,
+		},
+		{
+			name:     "different map keys",
+			a:        map[string]int{"a": 1},
+			b:        map[string]int{"b": 1},
+			expected: false,
+		},
+		{
+			name:     "both nil",
+			a:        nil,
+			b:        nil,
+			expected: true,
+		},
+		{
+			name:     "one nil",
+			a:        nil,
+			b:        42,
+			expected: false,
+		},
+		{
+			name:     "nested equal structures",
+			a:        [][]int{{1, 2}, {3, 4}},
+			b:        [][]int{{1, 2}, {3, 4}},
+			expected: true,
+		},
+		{
+			name:     "nested different structures",
+			a:        [][]int{{1, 2}, {3, 4}},
+			b:        [][]int{{1, 2}, {3, 5}},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsEqual(tt.a, tt.b)
+			if result != tt.expected {
+				t.Errorf("IsEqual() = %v, want %v", result, tt.expected)
 			}
 		})
 	}

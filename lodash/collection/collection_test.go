@@ -3,6 +3,7 @@ package collection
 import (
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -644,6 +645,302 @@ func TestFlatMapDeepString(t *testing.T) {
 			result := FlatMapDeep(tt.slice, tt.mapper)
 			if !reflect.DeepEqual(result, tt.expected) {
 				t.Errorf("FlatMapDeep() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFlatMapDepth(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    [][]int
+		mapper   func([]int) interface{}
+		depth    int
+		expected []interface{}
+	}{
+		{
+			name:  "depth 1 - partial flattening",
+			slice: [][]int{{1, 2}, {3, 4}},
+			mapper: func(x []int) interface{} {
+				return [][]int{x, x} // Create nested structure
+			},
+			depth:    1,
+			expected: []interface{}{[]int{1, 2}, []int{1, 2}, []int{3, 4}, []int{3, 4}},
+		},
+		{
+			name:  "depth 2 - full flattening",
+			slice: [][]int{{1, 2}, {3, 4}},
+			mapper: func(x []int) interface{} {
+				return [][]int{x, x} // Create nested structure
+			},
+			depth:    2,
+			expected: []interface{}{1, 2, 1, 2, 3, 4, 3, 4},
+		},
+		{
+			name:  "depth 0 - no flattening",
+			slice: [][]int{{1, 2}, {3, 4}},
+			mapper: func(x []int) interface{} {
+				return [][]int{x, x}
+			},
+			depth:    0,
+			expected: []interface{}{[][]int{{1, 2}, {1, 2}}, [][]int{{3, 4}, {3, 4}}},
+		},
+		{
+			name:  "single level mapping",
+			slice: [][]int{{1, 2}, {3, 4}},
+			mapper: func(x []int) interface{} {
+				return x // Return as-is
+			},
+			depth:    1,
+			expected: []interface{}{1, 2, 3, 4},
+		},
+		{
+			name:  "empty slice",
+			slice: [][]int{},
+			mapper: func(x []int) interface{} {
+				return x
+			},
+			depth:    1,
+			expected: []interface{}{},
+		},
+		{
+			name:  "negative depth",
+			slice: [][]int{{1, 2}},
+			mapper: func(x []int) interface{} {
+				return x
+			},
+			depth:    -1,
+			expected: []interface{}{[]int{1, 2}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FlatMapDepth(tt.slice, tt.mapper, tt.depth)
+			// Handle empty slice comparison
+			if len(result) == 0 && len(tt.expected) == 0 {
+				return // Both are empty, test passes
+			}
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("FlatMapDepth() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFlatMapDepthString(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []string
+		mapper   func(string) interface{}
+		depth    int
+		expected []interface{}
+	}{
+		{
+			name:  "string to nested structure - depth 1",
+			slice: []string{"ab", "cd"},
+			mapper: func(s string) interface{} {
+				chars := make([]string, len(s))
+				for i, c := range s {
+					chars[i] = string(c)
+				}
+				return []interface{}{chars} // Wrap in another slice
+			},
+			depth:    1,
+			expected: []interface{}{[]string{"a", "b"}, []string{"c", "d"}},
+		},
+		{
+			name:  "string to nested structure - depth 2",
+			slice: []string{"ab", "cd"},
+			mapper: func(s string) interface{} {
+				chars := make([]string, len(s))
+				for i, c := range s {
+					chars[i] = string(c)
+				}
+				return []interface{}{chars} // Wrap in another slice
+			},
+			depth:    2,
+			expected: []interface{}{"a", "b", "c", "d"},
+		},
+		{
+			name:  "string to characters - depth 1",
+			slice: []string{"ab", "cd"},
+			mapper: func(s string) interface{} {
+				chars := make([]string, len(s))
+				for i, c := range s {
+					chars[i] = string(c)
+				}
+				return chars
+			},
+			depth:    1,
+			expected: []interface{}{"a", "b", "c", "d"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FlatMapDepth(tt.slice, tt.mapper, tt.depth)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("FlatMapDepth() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestInvokeMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []string
+		method   func(string) string
+		expected []string
+	}{
+		{
+			name:     "to upper case",
+			slice:    []string{"hello", "world"},
+			method:   func(s string) string { return strings.ToUpper(s) },
+			expected: []string{"HELLO", "WORLD"},
+		},
+		{
+			name:     "add prefix",
+			slice:    []string{"apple", "banana"},
+			method:   func(s string) string { return "fruit: " + s },
+			expected: []string{"fruit: apple", "fruit: banana"},
+		},
+		{
+			name:     "empty slice",
+			slice:    []string{},
+			method:   func(s string) string { return strings.ToUpper(s) },
+			expected: []string{},
+		},
+		{
+			name:     "single element",
+			slice:    []string{"test"},
+			method:   func(s string) string { return strings.ToUpper(s) },
+			expected: []string{"TEST"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := InvokeMap(tt.slice, tt.method)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("InvokeMap() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestInvokeMapInt(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []int
+		method   func(int) int
+		expected []int
+	}{
+		{
+			name:     "square numbers",
+			slice:    []int{1, 2, 3, 4},
+			method:   func(x int) int { return x * x },
+			expected: []int{1, 4, 9, 16},
+		},
+		{
+			name:     "double numbers",
+			slice:    []int{1, 2, 3},
+			method:   func(x int) int { return x * 2 },
+			expected: []int{2, 4, 6},
+		},
+		{
+			name:  "absolute value",
+			slice: []int{-1, 2, -3, 4},
+			method: func(x int) int {
+				if x < 0 {
+					return -x
+				}
+				return x
+			},
+			expected: []int{1, 2, 3, 4},
+		},
+		{
+			name:     "empty slice",
+			slice:    []int{},
+			method:   func(x int) int { return x * 2 },
+			expected: []int{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := InvokeMap(tt.slice, tt.method)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("InvokeMap() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestInvokeMapWithArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []string
+		method   func(string, ...interface{}) string
+		args     []interface{}
+		expected []string
+	}{
+		{
+			name:  "add suffix",
+			slice: []string{"hello", "world"},
+			method: func(s string, args ...interface{}) string {
+				if len(args) > 0 {
+					if suffix, ok := args[0].(string); ok {
+						return s + suffix
+					}
+				}
+				return s
+			},
+			args:     []interface{}{"!"},
+			expected: []string{"hello!", "world!"},
+		},
+		{
+			name:  "format with multiple args",
+			slice: []string{"apple", "banana"},
+			method: func(s string, args ...interface{}) string {
+				if len(args) >= 2 {
+					if prefix, ok := args[0].(string); ok {
+						if suffix, ok := args[1].(string); ok {
+							return prefix + s + suffix
+						}
+					}
+				}
+				return s
+			},
+			args:     []interface{}{"[", "]"},
+			expected: []string{"[apple]", "[banana]"},
+		},
+		{
+			name:  "no args",
+			slice: []string{"test"},
+			method: func(s string, args ...interface{}) string {
+				return strings.ToUpper(s)
+			},
+			args:     []interface{}{},
+			expected: []string{"TEST"},
+		},
+		{
+			name:  "empty slice",
+			slice: []string{},
+			method: func(s string, args ...interface{}) string {
+				return s + "!"
+			},
+			args:     []interface{}{"!"},
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := InvokeMapWithArgs(tt.slice, tt.method, tt.args...)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("InvokeMapWithArgs() = %v, want %v", result, tt.expected)
 			}
 		})
 	}

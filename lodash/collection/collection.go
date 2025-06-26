@@ -4,6 +4,7 @@ package collection
 
 import (
 	"math/rand"
+	"reflect"
 	"sort"
 	"time"
 )
@@ -453,36 +454,90 @@ func FlatMapDeep[T any](slice []T, mapper func(T) interface{}) []interface{} {
 	return result
 }
 
-// flattenDeepRecursive recursively flattens any nested structure
+// flattenDeepRecursive recursively flattens any nested structure using reflection
 func flattenDeepRecursive(value interface{}) []interface{} {
 	var result []interface{}
 
-	// Use reflection to handle different slice types
-	switch v := value.(type) {
-	case []interface{}:
-		for _, item := range v {
+	// Use reflection to handle different slice types dynamically
+	v := reflect.ValueOf(value)
+
+	// Check if it's a slice or array
+	if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
+		for i := 0; i < v.Len(); i++ {
+			item := v.Index(i).Interface()
 			result = append(result, flattenDeepRecursive(item)...)
 		}
-	case []int:
-		for _, item := range v {
-			result = append(result, item)
-		}
-	case []string:
-		for _, item := range v {
-			result = append(result, item)
-		}
-	case []float64:
-		for _, item := range v {
-			result = append(result, item)
-		}
-	case []bool:
-		for _, item := range v {
-			result = append(result, item)
-		}
-	default:
+	} else {
 		// For non-slice types, add directly
 		result = append(result, value)
 	}
 
+	return result
+}
+
+// FlatMapDepth creates a flattened array of values by running each element in collection through iteratee and flattening the mapped results up to depth times.
+//
+// Example:
+//
+//	FlatMapDepth([][]int{{1, 2}, {3, 4}}, func(x []int) [][]int { return [][]int{x, x} }, 1) // [][]int{{1, 2}, {1, 2}, {3, 4}, {3, 4}}
+//	FlatMapDepth([][]int{{1, 2}, {3, 4}}, func(x []int) [][]int { return [][]int{x, x} }, 2) // []int{1, 2, 1, 2, 3, 4, 3, 4}
+func FlatMapDepth[T any](slice []T, mapper func(T) interface{}, depth int) []interface{} {
+	var result []interface{}
+	for _, item := range slice {
+		mapped := mapper(item)
+		flattened := flattenDepthRecursive(mapped, depth)
+		result = append(result, flattened...)
+	}
+	return result
+}
+
+// flattenDepthRecursive recursively flattens any nested structure up to specified depth
+func flattenDepthRecursive(value interface{}, depth int) []interface{} {
+	if depth <= 0 {
+		return []interface{}{value}
+	}
+
+	var result []interface{}
+	v := reflect.ValueOf(value)
+
+	// Check if it's a slice or array
+	if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
+		for i := 0; i < v.Len(); i++ {
+			item := v.Index(i).Interface()
+			result = append(result, flattenDepthRecursive(item, depth-1)...)
+		}
+	} else {
+		// For non-slice types, add directly
+		result = append(result, value)
+	}
+
+	return result
+}
+
+// InvokeMap invokes the method at path of each element in collection, returning an array of the results of each invoked method.
+// This is a simplified version that works with function calls rather than method paths.
+//
+// Example:
+//
+//	InvokeMap([]string{"hello", "world"}, func(s string) string { return strings.ToUpper(s) }) // []string{"HELLO", "WORLD"}
+//	InvokeMap([]int{1, 2, 3}, func(x int) int { return x * x }) // []int{1, 4, 9}
+func InvokeMap[T any, R any](slice []T, method func(T) R) []R {
+	result := make([]R, len(slice))
+	for i, item := range slice {
+		result[i] = method(item)
+	}
+	return result
+}
+
+// InvokeMapWithArgs invokes the method at path of each element in collection with additional arguments.
+//
+// Example:
+//
+//	InvokeMapWithArgs([]string{"hello", "world"}, func(s string, suffix string) string { return s + suffix }, "!") // []string{"hello!", "world!"}
+func InvokeMapWithArgs[T any, R any](slice []T, method func(T, ...interface{}) R, args ...interface{}) []R {
+	result := make([]R, len(slice))
+	for i, item := range slice {
+		result[i] = method(item, args...)
+	}
 	return result
 }

@@ -152,21 +152,6 @@ func Set(obj interface{}, path string, value interface{}) bool {
 	return true
 }
 
-// Pick creates an object composed of the picked object properties.
-//
-// Example:
-//
-//	Pick(map[string]int{"a": 1, "b": 2, "c": 3}, []string{"a", "c"}) // map[string]int{"a": 1, "c": 3}
-func Pick[K comparable, V any](m map[K]V, keys []K) map[K]V {
-	result := make(map[K]V)
-	for _, key := range keys {
-		if value, exists := m[key]; exists {
-			result[key] = value
-		}
-	}
-	return result
-}
-
 // Omit creates an object composed of the own and inherited enumerable property paths of object that are not omitted.
 //
 // Example:
@@ -321,14 +306,186 @@ func FromPairs(pairs [][2]interface{}) map[interface{}]interface{} {
 	return result
 }
 
+// Clone creates a shallow clone of value.
+//
+// Example:
+//
+//	Clone(map[string]int{"a": 1, "b": 2}) // map[string]int{"a": 1, "b": 2}
+//	Clone([]int{1, 2, 3}) // []int{1, 2, 3}
+func Clone[T any](value T) T {
+	v := reflect.ValueOf(value)
+	if !v.IsValid() {
+		return value
+	}
+
+	switch v.Kind() {
+	case reflect.Map:
+		if v.IsNil() {
+			return value
+		}
+		mapType := v.Type()
+		newMap := reflect.MakeMap(mapType)
+		for _, key := range v.MapKeys() {
+			newMap.SetMapIndex(key, v.MapIndex(key))
+		}
+		return newMap.Interface().(T)
+	case reflect.Slice:
+		if v.IsNil() {
+			return value
+		}
+		sliceType := v.Type()
+		newSlice := reflect.MakeSlice(sliceType, v.Len(), v.Cap())
+		reflect.Copy(newSlice, v)
+		return newSlice.Interface().(T)
+	case reflect.Array:
+		arrayType := v.Type()
+		newArray := reflect.New(arrayType).Elem()
+		for i := 0; i < v.Len(); i++ {
+			newArray.Index(i).Set(v.Index(i))
+		}
+		return newArray.Interface().(T)
+	case reflect.Ptr:
+		if v.IsNil() {
+			return value
+		}
+		elemType := v.Type().Elem()
+		newPtr := reflect.New(elemType)
+		newPtr.Elem().Set(v.Elem())
+		return newPtr.Interface().(T)
+	default:
+		// For primitive types, strings, etc., return as-is (they are immutable)
+		return value
+	}
+}
+
+// CloneDeep creates a deep clone of value.
+//
+// Example:
+//
+//	CloneDeep(map[string]interface{}{"a": map[string]int{"b": 1}}) // Deep copy with nested maps
+//	CloneDeep([][]int{{1, 2}, {3, 4}}) // Deep copy with nested slices
+func CloneDeep[T any](value T) T {
+	return cloneDeepValue(reflect.ValueOf(value)).Interface().(T)
+}
+
+// cloneDeepValue recursively clones a reflect.Value
+func cloneDeepValue(v reflect.Value) reflect.Value {
+	if !v.IsValid() {
+		return v
+	}
+
+	switch v.Kind() {
+	case reflect.Map:
+		if v.IsNil() {
+			return v
+		}
+		mapType := v.Type()
+		newMap := reflect.MakeMap(mapType)
+		for _, key := range v.MapKeys() {
+			clonedKey := cloneDeepValue(key)
+			clonedValue := cloneDeepValue(v.MapIndex(key))
+			newMap.SetMapIndex(clonedKey, clonedValue)
+		}
+		return newMap
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		sliceType := v.Type()
+		newSlice := reflect.MakeSlice(sliceType, v.Len(), v.Len())
+		for i := 0; i < v.Len(); i++ {
+			clonedElem := cloneDeepValue(v.Index(i))
+			newSlice.Index(i).Set(clonedElem)
+		}
+		return newSlice
+	case reflect.Array:
+		arrayType := v.Type()
+		newArray := reflect.New(arrayType).Elem()
+		for i := 0; i < v.Len(); i++ {
+			clonedElem := cloneDeepValue(v.Index(i))
+			newArray.Index(i).Set(clonedElem)
+		}
+		return newArray
+	case reflect.Ptr:
+		if v.IsNil() {
+			return v
+		}
+		elemType := v.Type().Elem()
+		newPtr := reflect.New(elemType)
+		clonedElem := cloneDeepValue(v.Elem())
+		newPtr.Elem().Set(clonedElem)
+		return newPtr
+	case reflect.Struct:
+		structType := v.Type()
+		newStruct := reflect.New(structType).Elem()
+		for i := 0; i < v.NumField(); i++ {
+			field := v.Field(i)
+			structField := structType.Field(i)
+			// Check if field is exported (can be set)
+			if structField.IsExported() {
+				clonedField := cloneDeepValue(field)
+				newStruct.Field(i).Set(clonedField)
+			} else {
+				// For unexported fields, copy directly if possible
+				if field.CanInterface() {
+					newStruct.Field(i).Set(field)
+				}
+			}
+		}
+		return newStruct
+	case reflect.Interface:
+		if v.IsNil() {
+			return v
+		}
+		clonedElem := cloneDeepValue(v.Elem())
+		newInterface := reflect.New(v.Type()).Elem()
+		newInterface.Set(clonedElem)
+		return newInterface
+	default:
+		// For primitive types, strings, etc., return as-is (they are immutable)
+		return v
+	}
+}
+
+// Pick creates an object composed of the picked object properties.
+//
+// Example:
+//
+//	Pick(map[string]int{"a": 1, "b": 2, "c": 3}, []string{"a", "c"}) // map[string]int{"a": 1, "c": 3}
+func Pick[K comparable, V any](m map[K]V, keys []K) map[K]V {
+	result := make(map[K]V)
+	for _, key := range keys {
+		if value, exists := m[key]; exists {
+			result[key] = value
+		}
+	}
+	return result
+}
+
+// PickBy creates an object composed of the object properties predicate returns truthy for.
+//
+// Example:
+//
+//	PickBy(map[string]int{"a": 1, "b": 2, "c": 3}, func(v int, k string) bool { return v > 1 }) // map[string]int{"b": 2, "c": 3}
+func PickBy[K comparable, V any](m map[K]V, predicate func(V, K) bool) map[K]V {
+	result := make(map[K]V)
+	for key, value := range m {
+		if predicate(value, key) {
+			result[key] = value
+		}
+	}
+	return result
+}
+
 // IsEmpty checks if value is an empty object, collection, map, or set.
 //
 // Example:
 //
-//	IsEmpty(map[string]int{}) // true
-//	IsEmpty(map[string]int{"a": 1}) // false
+//	IsEmpty(nil) // true
+//	IsEmpty("") // true
 //	IsEmpty([]int{}) // true
-//	IsEmpty([]int{1}) // false
+//	IsEmpty(map[string]int{}) // true
+//	IsEmpty(0) // true (for numbers)
 func IsEmpty(value interface{}) bool {
 	if value == nil {
 		return true
@@ -336,14 +493,108 @@ func IsEmpty(value interface{}) bool {
 
 	v := reflect.ValueOf(value)
 	switch v.Kind() {
-	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice, reflect.String:
+	case reflect.Array, reflect.Slice:
 		return v.Len() == 0
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Map:
+		return v.Len() == 0
+	case reflect.String:
+		return v.Len() == 0
+	case reflect.Chan:
+		return v.Len() == 0
+	case reflect.Ptr:
 		if v.IsNil() {
 			return true
 		}
 		return IsEmpty(v.Elem().Interface())
+	case reflect.Interface:
+		if v.IsNil() {
+			return true
+		}
+		return IsEmpty(v.Elem().Interface())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	case reflect.Bool:
+		return !v.Bool()
 	default:
 		return false
+	}
+}
+
+// IsEqual performs a deep comparison between two values to determine if they are equivalent.
+//
+// Example:
+//
+//	IsEqual([]int{1, 2}, []int{1, 2}) // true
+//	IsEqual(map[string]int{"a": 1}, map[string]int{"a": 1}) // true
+//	IsEqual("hello", "hello") // true
+func IsEqual(a, b interface{}) bool {
+	return isEqualValue(reflect.ValueOf(a), reflect.ValueOf(b))
+}
+
+// isEqualValue recursively compares two reflect.Values
+func isEqualValue(a, b reflect.Value) bool {
+	if !a.IsValid() && !b.IsValid() {
+		return true
+	}
+	if !a.IsValid() || !b.IsValid() {
+		return false
+	}
+
+	if a.Type() != b.Type() {
+		return false
+	}
+
+	switch a.Kind() {
+	case reflect.Array, reflect.Slice:
+		if a.Len() != b.Len() {
+			return false
+		}
+		for i := 0; i < a.Len(); i++ {
+			if !isEqualValue(a.Index(i), b.Index(i)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Map:
+		if a.Len() != b.Len() {
+			return false
+		}
+		for _, key := range a.MapKeys() {
+			aVal := a.MapIndex(key)
+			bVal := b.MapIndex(key)
+			if !bVal.IsValid() || !isEqualValue(aVal, bVal) {
+				return false
+			}
+		}
+		return true
+	case reflect.Struct:
+		for i := 0; i < a.NumField(); i++ {
+			if !isEqualValue(a.Field(i), b.Field(i)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Ptr:
+		if a.IsNil() && b.IsNil() {
+			return true
+		}
+		if a.IsNil() || b.IsNil() {
+			return false
+		}
+		return isEqualValue(a.Elem(), b.Elem())
+	case reflect.Interface:
+		if a.IsNil() && b.IsNil() {
+			return true
+		}
+		if a.IsNil() || b.IsNil() {
+			return false
+		}
+		return isEqualValue(a.Elem(), b.Elem())
+	default:
+		return a.Interface() == b.Interface()
 	}
 }

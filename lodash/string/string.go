@@ -3,7 +3,6 @@
 package string
 
 import (
-	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -274,39 +273,6 @@ func Words(s string) []string {
 	return extractWords(s)
 }
 
-// extractWords extracts words from a string using various delimiters and case changes
-func extractWords(s string) []string {
-	if s == "" {
-		return []string{}
-	}
-
-	// Replace common delimiters and punctuation with spaces
-	re := regexp.MustCompile(`[_\-\s,&]+`)
-	s = re.ReplaceAllString(s, " ")
-
-	// Split on case changes (camelCase, PascalCase)
-	re = regexp.MustCompile(`([a-z])([A-Z])`)
-	s = re.ReplaceAllString(s, "$1 $2")
-
-	// Split on number boundaries
-	re = regexp.MustCompile(`([a-zA-Z])(\d)`)
-	s = re.ReplaceAllString(s, "$1 $2")
-	re = regexp.MustCompile(`(\d)([a-zA-Z])`)
-	s = re.ReplaceAllString(s, "$1 $2")
-
-	// Clean up and split
-	words := strings.Fields(s)
-	var result []string
-	for _, word := range words {
-		// Only include alphabetic words
-		if word != "" && regexp.MustCompile(`^[a-zA-Z]+$`).MatchString(word) {
-			result = append(result, word)
-		}
-	}
-
-	return result
-}
-
 // Truncate truncates string if it's longer than the given maximum string length.
 //
 // Example:
@@ -337,4 +303,334 @@ func Truncate(s string, length int, omission ...string) string {
 	truncatePos := max(0, length-len(omitRunes))
 
 	return string(runes[:truncatePos]) + omit
+}
+
+// Deburr converts Latin-1 Supplement and Latin Extended-A letters to basic Latin letters and removes combining diacritical marks.
+//
+// Example:
+//
+//	Deburr("déjà vu") // "deja vu"
+//	Deburr("café") // "cafe"
+//	Deburr("naïve") // "naive"
+func Deburr(s string) string {
+	if s == "" {
+		return ""
+	}
+
+	// Map of common diacritical characters to their base forms
+	deburMap := map[rune]rune{
+		// Latin-1 Supplement
+		'À': 'A', 'Á': 'A', 'Â': 'A', 'Ã': 'A', 'Ä': 'A', 'Å': 'A',
+		'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a',
+		'Ç': 'C', 'ç': 'c',
+		'È': 'E', 'É': 'E', 'Ê': 'E', 'Ë': 'E',
+		'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
+		'Ì': 'I', 'Í': 'I', 'Î': 'I', 'Ï': 'I',
+		'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i',
+		'Ñ': 'N', 'ñ': 'n',
+		'Ò': 'O', 'Ó': 'O', 'Ô': 'O', 'Õ': 'O', 'Ö': 'O',
+		'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
+		'Ù': 'U', 'Ú': 'U', 'Û': 'U', 'Ü': 'U',
+		'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u',
+		'Ý': 'Y', 'ý': 'y', 'ÿ': 'y',
+		// Additional common characters
+		'Æ': 'A', 'æ': 'a',
+		'Œ': 'O', 'œ': 'o',
+		'ß': 's',
+	}
+
+	var result strings.Builder
+	for _, r := range s {
+		if replacement, exists := deburMap[r]; exists {
+			result.WriteRune(replacement)
+		} else {
+			result.WriteRune(r)
+		}
+	}
+
+	return result.String()
+}
+
+// Escape converts the characters "&", "<", ">", '"', and "'" in string to their corresponding HTML entities.
+//
+// Example:
+//
+//	Escape("fred, barney, & pebbles") // "fred, barney, &amp; pebbles"
+//	Escape("<script>alert('xss')</script>") // "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;"
+func Escape(s string) string {
+	if s == "" {
+		return ""
+	}
+
+	// HTML entity mappings
+	escapeMap := map[rune]string{
+		'&':  "&amp;",
+		'<':  "&lt;",
+		'>':  "&gt;",
+		'"':  "&quot;",
+		'\'': "&#39;",
+	}
+
+	var result strings.Builder
+	for _, r := range s {
+		if entity, exists := escapeMap[r]; exists {
+			result.WriteString(entity)
+		} else {
+			result.WriteRune(r)
+		}
+	}
+
+	return result.String()
+}
+
+// Unescape converts HTML entities "&amp;", "&lt;", "&gt;", "&quot;", and "&#39;" in string to their corresponding characters.
+//
+// Example:
+//
+//	Unescape("fred, barney, &amp; pebbles") // "fred, barney, & pebbles"
+//	Unescape("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;") // "<script>alert('xss')</script>"
+func Unescape(s string) string {
+	if s == "" {
+		return ""
+	}
+
+	// HTML entity mappings (reverse of escape)
+	unescapeMap := map[string]string{
+		"&amp;":  "&",
+		"&lt;":   "<",
+		"&gt;":   ">",
+		"&quot;": "\"",
+		"&#39;":  "'",
+		"&#x27;": "'", // Alternative single quote encoding
+	}
+
+	result := s
+	for entity, char := range unescapeMap {
+		result = strings.ReplaceAll(result, entity, char)
+	}
+
+	return result
+}
+
+// EscapeRegExp escapes the RegExp special characters "^", "$", "\", ".", "*", "+", "?", "(", ")", "[", "]", "{", "}", and "|" in string.
+//
+// Example:
+//
+//	EscapeRegExp("[lodash](https://lodash.com/)") // "\\[lodash\\]\\(https://lodash\\.com/\\)"
+//	EscapeRegExp("$100.00") // "\\$100\\.00"
+func EscapeRegExp(s string) string {
+	if s == "" {
+		return ""
+	}
+
+	// RegExp special characters that need escaping
+	regexpChars := map[rune]bool{
+		'^': true, '$': true, '\\': true, '.': true, '*': true, '+': true,
+		'?': true, '(': true, ')': true, '[': true, ']': true, '{': true,
+		'}': true, '|': true,
+	}
+
+	var result strings.Builder
+	for _, r := range s {
+		if regexpChars[r] {
+			result.WriteRune('\\')
+		}
+		result.WriteRune(r)
+	}
+
+	return result.String()
+}
+
+// LowerCase converts string, as space separated words, to lower case.
+//
+// Example:
+//
+//	LowerCase("--Foo-Bar--") // "foo bar"
+//	LowerCase("fooBar") // "foo bar"
+//	LowerCase("__FOO_BAR__") // "foo bar"
+func LowerCase(s string) string {
+	words := extractWords(s)
+	if len(words) == 0 {
+		return ""
+	}
+
+	var result strings.Builder
+	for i, word := range words {
+		if i > 0 {
+			result.WriteRune(' ')
+		}
+		result.WriteString(strings.ToLower(word))
+	}
+
+	return result.String()
+}
+
+// UpperCase converts string, as space separated words, to upper case.
+//
+// Example:
+//
+//	UpperCase("--Foo-Bar--") // "FOO BAR"
+//	UpperCase("fooBar") // "FOO BAR"
+//	UpperCase("__FOO_BAR__") // "FOO BAR"
+func UpperCase(s string) string {
+	words := extractWords(s)
+	if len(words) == 0 {
+		return ""
+	}
+
+	var result strings.Builder
+	for i, word := range words {
+		if i > 0 {
+			result.WriteRune(' ')
+		}
+		result.WriteString(strings.ToUpper(word))
+	}
+
+	return result.String()
+}
+
+// extractWords extracts words from a string, handling camelCase, snake_case, kebab-case, etc.
+func extractWords(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+
+	var words []string
+	var currentWord strings.Builder
+
+	runes := []rune(s)
+	for i, r := range runes {
+		if isWordSeparator(r) {
+			// Skip separators, but finalize current word if any
+			if currentWord.Len() > 0 {
+				words = append(words, currentWord.String())
+				currentWord.Reset()
+			}
+		} else if i > 0 && isWordBoundary(runes[i-1], r) {
+			// Word boundary detected (e.g., camelCase transition)
+			if currentWord.Len() > 0 {
+				words = append(words, currentWord.String())
+				currentWord.Reset()
+			}
+			currentWord.WriteRune(r)
+		} else {
+			currentWord.WriteRune(r)
+		}
+	}
+
+	// Add the last word if any
+	if currentWord.Len() > 0 {
+		words = append(words, currentWord.String())
+	}
+
+	// Filter out empty words and non-alphabetic words
+	var result []string
+	for _, word := range words {
+		if word != "" && hasAlphaNumeric(word) {
+			result = append(result, word)
+		}
+	}
+
+	return result
+}
+
+// hasAlphaNumeric checks if string contains at least one alphanumeric character
+func hasAlphaNumeric(s string) bool {
+	for _, r := range s {
+		if isLetter(r) || isDigit(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// isWordSeparator checks if a rune is a word separator
+func isWordSeparator(r rune) bool {
+	return r == ' ' || r == '-' || r == '_' || r == '.' || r == '/' || r == '\\' ||
+		r == ',' || r == ';' || r == ':' || r == '!' || r == '?' || r == '@' ||
+		r == '#' || r == '$' || r == '%' || r == '^' || r == '&' || r == '*' ||
+		r == '(' || r == ')' || r == '[' || r == ']' || r == '{' || r == '}' ||
+		r == '|' || r == '=' || r == '+' || r == '<' || r == '>' || r == '~' ||
+		r == '`' || r == '"' || r == '\''
+}
+
+// isWordBoundary checks if there's a word boundary between two runes
+func isWordBoundary(prev, curr rune) bool {
+	// Transition from lowercase to uppercase (camelCase)
+	if isLower(prev) && isUpper(curr) {
+		return true
+	}
+	// Transition from letter to digit or digit to letter
+	if (isLetter(prev) && isDigit(curr)) || (isDigit(prev) && isLetter(curr)) {
+		return true
+	}
+	return false
+}
+
+// Helper functions for character classification
+func isLetter(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
+}
+
+func isDigit(r rune) bool {
+	return r >= '0' && r <= '9'
+}
+
+func isLower(r rune) bool {
+	return r >= 'a' && r <= 'z'
+}
+
+func isUpper(r rune) bool {
+	return r >= 'A' && r <= 'Z'
+}
+
+// ToLower converts string to lower case.
+//
+// Example:
+//
+//	ToLower("HELLO WORLD") // "hello world"
+//	ToLower("FooBar") // "foobar"
+func ToLower(s string) string {
+	return strings.ToLower(s)
+}
+
+// ToUpper converts string to upper case.
+//
+// Example:
+//
+//	ToUpper("hello world") // "HELLO WORLD"
+//	ToUpper("FooBar") // "FOOBAR"
+func ToUpper(s string) string {
+	return strings.ToUpper(s)
+}
+
+// StartCase converts string to start case.
+//
+// Example:
+//
+//	StartCase("--foo-bar--") // "Foo Bar"
+//	StartCase("fooBar") // "Foo Bar"
+//	StartCase("__FOO_BAR__") // "FOO BAR"
+func StartCase(s string) string {
+	words := extractWords(s)
+	if len(words) == 0 {
+		return ""
+	}
+
+	var result strings.Builder
+	for i, word := range words {
+		if i > 0 {
+			result.WriteRune(' ')
+		}
+		// Capitalize first letter, lowercase the rest
+		if len(word) > 0 {
+			runes := []rune(word)
+			result.WriteRune(unicode.ToUpper(runes[0]))
+			for _, r := range runes[1:] {
+				result.WriteRune(unicode.ToLower(r))
+			}
+		}
+	}
+
+	return result.String()
 }

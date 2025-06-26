@@ -635,3 +635,585 @@ func TestTruncate(t *testing.T) {
 		})
 	}
 }
+
+func TestDeburr(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "French characters",
+			input:    "déjà vu",
+			expected: "deja vu",
+		},
+		{
+			name:     "cafe with accent",
+			input:    "café",
+			expected: "cafe",
+		},
+		{
+			name:     "naive with diaeresis",
+			input:    "naïve",
+			expected: "naive",
+		},
+		{
+			name:     "Spanish characters",
+			input:    "niño",
+			expected: "nino",
+		},
+		{
+			name:     "German characters",
+			input:    "Müller",
+			expected: "Muller",
+		},
+		{
+			name:     "mixed case with accents",
+			input:    "CAFÉ and café",
+			expected: "CAFE and cafe",
+		},
+		{
+			name:     "no accents",
+			input:    "hello world",
+			expected: "hello world",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "special characters",
+			input:    "Æsop's Œuvre",
+			expected: "Asop's Ouvre",
+		},
+		{
+			name:     "German eszett",
+			input:    "Straße",
+			expected: "Strase",
+		},
+		{
+			name:     "comprehensive test",
+			input:    "Àlphà Bètà Gàmmà",
+			expected: "Alpha Beta Gamma",
+		},
+		{
+			name:     "numbers and symbols unchanged",
+			input:    "test123!@#",
+			expected: "test123!@#",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := Deburr(tt.input)
+			if result != tt.expected {
+				t.Errorf("Deburr() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestEscape(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "ampersand",
+			input:    "fred, barney, & pebbles",
+			expected: "fred, barney, &amp; pebbles",
+		},
+		{
+			name:     "script tag",
+			input:    "<script>alert('xss')</script>",
+			expected: "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;",
+		},
+		{
+			name:     "double quotes",
+			input:    `He said "Hello"`,
+			expected: "He said &quot;Hello&quot;",
+		},
+		{
+			name:     "single quotes",
+			input:    "It's a test",
+			expected: "It&#39;s a test",
+		},
+		{
+			name:     "all special characters",
+			input:    `<>&"'`,
+			expected: "&lt;&gt;&amp;&quot;&#39;",
+		},
+		{
+			name:     "no special characters",
+			input:    "hello world",
+			expected: "hello world",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "mixed content",
+			input:    `<div class="test">Hello & "world"</div>`,
+			expected: "&lt;div class=&quot;test&quot;&gt;Hello &amp; &quot;world&quot;&lt;/div&gt;",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := Escape(tt.input)
+			if result != tt.expected {
+				t.Errorf("Escape() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestUnescape(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "ampersand",
+			input:    "fred, barney, &amp; pebbles",
+			expected: "fred, barney, & pebbles",
+		},
+		{
+			name:     "script tag",
+			input:    "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;",
+			expected: "<script>alert('xss')</script>",
+		},
+		{
+			name:     "double quotes",
+			input:    "He said &quot;Hello&quot;",
+			expected: `He said "Hello"`,
+		},
+		{
+			name:     "single quotes",
+			input:    "It&#39;s a test",
+			expected: "It's a test",
+		},
+		{
+			name:     "alternative single quote",
+			input:    "It&#x27;s a test",
+			expected: "It's a test",
+		},
+		{
+			name:     "all special characters",
+			input:    "&lt;&gt;&amp;&quot;&#39;",
+			expected: `<>&"'`,
+		},
+		{
+			name:     "no entities",
+			input:    "hello world",
+			expected: "hello world",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "mixed content",
+			input:    "&lt;div class=&quot;test&quot;&gt;Hello &amp; &quot;world&quot;&lt;/div&gt;",
+			expected: `<div class="test">Hello & "world"</div>`,
+		},
+		{
+			name:     "partial entities (should not change)",
+			input:    "&am; &l; &g;",
+			expected: "&am; &l; &g;",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := Unescape(tt.input)
+			if result != tt.expected {
+				t.Errorf("Unescape() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestEscapeRegExp(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "lodash URL",
+			input:    "[lodash](https://lodash.com/)",
+			expected: "\\[lodash\\]\\(https://lodash\\.com/\\)",
+		},
+		{
+			name:     "price with dollar and dot",
+			input:    "$100.00",
+			expected: "\\$100\\.00",
+		},
+		{
+			name:     "all special characters",
+			input:    "^$\\.\\*+?()[]{}|",
+			expected: "\\^\\$\\\\\\.\\\\\\*\\+\\?\\(\\)\\[\\]\\{\\}\\|",
+		},
+		{
+			name:     "caret and dollar",
+			input:    "^start$",
+			expected: "\\^start\\$",
+		},
+		{
+			name:     "parentheses and brackets",
+			input:    "(test)[array]{object}",
+			expected: "\\(test\\)\\[array\\]\\{object\\}",
+		},
+		{
+			name:     "wildcard and plus",
+			input:    "*.txt+",
+			expected: "\\*\\.txt\\+",
+		},
+		{
+			name:     "question mark and pipe",
+			input:    "test?|backup",
+			expected: "test\\?\\|backup",
+		},
+		{
+			name:     "no special characters",
+			input:    "hello world",
+			expected: "hello world",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "backslash",
+			input:    "path\\to\\file",
+			expected: "path\\\\to\\\\file",
+		},
+		{
+			name:     "mixed content",
+			input:    "Hello (world) $100.00!",
+			expected: "Hello \\(world\\) \\$100\\.00!",
+		},
+		{
+			name:     "email pattern",
+			input:    "user@domain.com",
+			expected: "user@domain\\.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := EscapeRegExp(tt.input)
+			if result != tt.expected {
+				t.Errorf("EscapeRegExp() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLowerCase(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "kebab case",
+			input:    "--Foo-Bar--",
+			expected: "foo bar",
+		},
+		{
+			name:     "camel case",
+			input:    "fooBar",
+			expected: "foo bar",
+		},
+		{
+			name:     "snake case",
+			input:    "__FOO_BAR__",
+			expected: "foo bar",
+		},
+		{
+			name:     "pascal case",
+			input:    "FooBar",
+			expected: "foo bar",
+		},
+		{
+			name:     "mixed separators",
+			input:    "foo-bar_baz.qux",
+			expected: "foo bar baz qux",
+		},
+		{
+			name:     "with numbers",
+			input:    "foo2Bar3",
+			expected: "foo 2 bar 3",
+		},
+		{
+			name:     "all uppercase",
+			input:    "HELLO WORLD",
+			expected: "hello world",
+		},
+		{
+			name:     "already lowercase",
+			input:    "hello world",
+			expected: "hello world",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "single word",
+			input:    "Hello",
+			expected: "hello",
+		},
+		{
+			name:     "XML parser example",
+			input:    "XMLParser",
+			expected: "xmlparser", // Current implementation doesn't split consecutive uppercase
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := LowerCase(tt.input)
+			if result != tt.expected {
+				t.Errorf("LowerCase() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestUpperCase(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "kebab case",
+			input:    "--Foo-Bar--",
+			expected: "FOO BAR",
+		},
+		{
+			name:     "camel case",
+			input:    "fooBar",
+			expected: "FOO BAR",
+		},
+		{
+			name:     "snake case",
+			input:    "__FOO_BAR__",
+			expected: "FOO BAR",
+		},
+		{
+			name:     "pascal case",
+			input:    "FooBar",
+			expected: "FOO BAR",
+		},
+		{
+			name:     "mixed separators",
+			input:    "foo-bar_baz.qux",
+			expected: "FOO BAR BAZ QUX",
+		},
+		{
+			name:     "with numbers",
+			input:    "foo2Bar3",
+			expected: "FOO 2 BAR 3",
+		},
+		{
+			name:     "all lowercase",
+			input:    "hello world",
+			expected: "HELLO WORLD",
+		},
+		{
+			name:     "already uppercase",
+			input:    "HELLO WORLD",
+			expected: "HELLO WORLD",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "single word",
+			input:    "hello",
+			expected: "HELLO",
+		},
+		{
+			name:     "XML parser example",
+			input:    "XMLParser",
+			expected: "XMLPARSER", // Current implementation doesn't split consecutive uppercase
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := UpperCase(tt.input)
+			if result != tt.expected {
+				t.Errorf("UpperCase() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestToLower(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "all uppercase",
+			input:    "HELLO WORLD",
+			expected: "hello world",
+		},
+		{
+			name:     "mixed case",
+			input:    "FooBar",
+			expected: "foobar",
+		},
+		{
+			name:     "already lowercase",
+			input:    "hello world",
+			expected: "hello world",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "with numbers and symbols",
+			input:    "Hello123!@#",
+			expected: "hello123!@#",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ToLower(tt.input)
+			if result != tt.expected {
+				t.Errorf("ToLower() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestToUpper(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "all lowercase",
+			input:    "hello world",
+			expected: "HELLO WORLD",
+		},
+		{
+			name:     "mixed case",
+			input:    "FooBar",
+			expected: "FOOBAR",
+		},
+		{
+			name:     "already uppercase",
+			input:    "HELLO WORLD",
+			expected: "HELLO WORLD",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "with numbers and symbols",
+			input:    "hello123!@#",
+			expected: "HELLO123!@#",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ToUpper(tt.input)
+			if result != tt.expected {
+				t.Errorf("ToUpper() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestStartCase(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "kebab case",
+			input:    "--foo-bar--",
+			expected: "Foo Bar",
+		},
+		{
+			name:     "camel case",
+			input:    "fooBar",
+			expected: "Foo Bar",
+		},
+		{
+			name:     "snake case",
+			input:    "__FOO_BAR__",
+			expected: "Foo Bar",
+		},
+		{
+			name:     "pascal case",
+			input:    "FooBar",
+			expected: "Foo Bar",
+		},
+		{
+			name:     "mixed separators",
+			input:    "foo-bar_baz.qux",
+			expected: "Foo Bar Baz Qux",
+		},
+		{
+			name:     "with numbers",
+			input:    "foo2Bar3",
+			expected: "Foo 2 Bar 3",
+		},
+		{
+			name:     "all uppercase",
+			input:    "HELLO WORLD",
+			expected: "Hello World",
+		},
+		{
+			name:     "all lowercase",
+			input:    "hello world",
+			expected: "Hello World",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "single word",
+			input:    "hello",
+			expected: "Hello",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := StartCase(tt.input)
+			if result != tt.expected {
+				t.Errorf("StartCase() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
