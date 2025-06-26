@@ -1217,3 +1217,210 @@ func TestStartCase(t *testing.T) {
 		})
 	}
 }
+
+func TestParseInt(t *testing.T) {
+	tests := []struct {
+		name     string
+		str      string
+		radix    []int
+		expected int64
+	}{
+		{
+			name:     "decimal number",
+			str:      "42",
+			radix:    []int{},
+			expected: 42,
+		},
+		{
+			name:     "decimal with radix 10",
+			str:      "42",
+			radix:    []int{10},
+			expected: 42,
+		},
+		{
+			name:     "binary number",
+			str:      "1010",
+			radix:    []int{2},
+			expected: 10,
+		},
+		{
+			name:     "hexadecimal number",
+			str:      "ff",
+			radix:    []int{16},
+			expected: 255,
+		},
+		{
+			name:     "hexadecimal with 0x prefix",
+			str:      "0x10",
+			radix:    []int{},
+			expected: 16,
+		},
+		{
+			name:     "octal number",
+			str:      "77",
+			radix:    []int{8},
+			expected: 63,
+		},
+		{
+			name:     "negative number",
+			str:      "-42",
+			radix:    []int{},
+			expected: -42,
+		},
+		{
+			name:     "positive sign",
+			str:      "+42",
+			radix:    []int{},
+			expected: 42,
+		},
+		{
+			name:     "with whitespace",
+			str:      "  42  ",
+			radix:    []int{},
+			expected: 42,
+		},
+		{
+			name:     "invalid characters stop parsing",
+			str:      "42abc",
+			radix:    []int{},
+			expected: 42,
+		},
+		{
+			name:     "empty string",
+			str:      "",
+			radix:    []int{},
+			expected: 0,
+		},
+		{
+			name:     "invalid radix",
+			str:      "42",
+			radix:    []int{1},
+			expected: 0,
+		},
+		{
+			name:     "base 36",
+			str:      "zz",
+			radix:    []int{36},
+			expected: 1295, // 35*36 + 35
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ParseInt(tt.str, tt.radix...)
+			if result != tt.expected {
+				t.Errorf("ParseInt() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestReplace(t *testing.T) {
+	tests := []struct {
+		name        string
+		str         string
+		pattern     string
+		replacement string
+		expected    string
+	}{
+		{
+			name:        "basic replacement",
+			str:         "Hi Fred",
+			pattern:     "Fred",
+			replacement: "Barney",
+			expected:    "Hi Barney",
+		},
+		{
+			name:        "replace word",
+			str:         "hello world",
+			pattern:     "world",
+			replacement: "Go",
+			expected:    "hello Go",
+		},
+		{
+			name:        "first occurrence only",
+			str:         "hello hello",
+			pattern:     "hello",
+			replacement: "hi",
+			expected:    "hi hello",
+		},
+		{
+			name:        "no match",
+			str:         "hello world",
+			pattern:     "foo",
+			replacement: "bar",
+			expected:    "hello world",
+		},
+		{
+			name:        "empty string",
+			str:         "",
+			pattern:     "test",
+			replacement: "replace",
+			expected:    "",
+		},
+		{
+			name:        "empty pattern",
+			str:         "hello",
+			pattern:     "",
+			replacement: "test",
+			expected:    "hello",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := Replace(tt.str, tt.pattern, tt.replacement)
+			if result != tt.expected {
+				t.Errorf("Replace() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestReplaceAll(t *testing.T) {
+	tests := []struct {
+		name        string
+		str         string
+		pattern     string
+		replacement string
+		expected    string
+	}{
+		{
+			name:        "replace all occurrences",
+			str:         "hello hello",
+			pattern:     "hello",
+			replacement: "hi",
+			expected:    "hi hi",
+		},
+		{
+			name:        "multiple replacements",
+			str:         "foo bar foo",
+			pattern:     "foo",
+			replacement: "baz",
+			expected:    "baz bar baz",
+		},
+		{
+			name:        "no match",
+			str:         "hello world",
+			pattern:     "foo",
+			replacement: "bar",
+			expected:    "hello world",
+		},
+		{
+			name:        "empty string",
+			str:         "",
+			pattern:     "test",
+			replacement: "replace",
+			expected:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ReplaceAll(tt.str, tt.pattern, tt.replacement)
+			if result != tt.expected {
+				t.Errorf("ReplaceAll() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}

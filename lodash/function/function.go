@@ -371,3 +371,177 @@ func Pipe[T any](fns ...func(T) T) func(T) T {
 		return result
 	}
 }
+
+// Curry2 creates a curried version of a function that takes 2 arguments.
+//
+// Example:
+//
+//	add := func(a, b int) int { return a + b }
+//	curriedAdd := Curry2(add)
+//	addFive := curriedAdd(5)
+//	result := addFive(3) // 8
+func Curry2[T1, T2, R any](fn func(T1, T2) R) func(T1) func(T2) R {
+	return func(arg1 T1) func(T2) R {
+		return func(arg2 T2) R {
+			return fn(arg1, arg2)
+		}
+	}
+}
+
+// Curry3 creates a curried version of a function that takes 3 arguments.
+//
+// Example:
+//
+//	add3 := func(a, b, c int) int { return a + b + c }
+//	curriedAdd3 := Curry3(add3)
+//	result := curriedAdd3(1)(2)(3) // 6
+func Curry3[T1, T2, T3, R any](fn func(T1, T2, T3) R) func(T1) func(T2) func(T3) R {
+	return func(arg1 T1) func(T2) func(T3) R {
+		return func(arg2 T2) func(T3) R {
+			return func(arg3 T3) R {
+				return fn(arg1, arg2, arg3)
+			}
+		}
+	}
+}
+
+// Curry4 creates a curried version of a function that takes 4 arguments.
+//
+// Example:
+//
+//	add4 := func(a, b, c, d int) int { return a + b + c + d }
+//	curriedAdd4 := Curry4(add4)
+//	result := curriedAdd4(1)(2)(3)(4) // 10
+func Curry4[T1, T2, T3, T4, R any](fn func(T1, T2, T3, T4) R) func(T1) func(T2) func(T3) func(T4) R {
+	return func(arg1 T1) func(T2) func(T3) func(T4) R {
+		return func(arg2 T2) func(T3) func(T4) R {
+			return func(arg3 T3) func(T4) R {
+				return func(arg4 T4) R {
+					return fn(arg1, arg2, arg3, arg4)
+				}
+			}
+		}
+	}
+}
+
+// Partial2 creates a function that invokes func with partials prepended to the arguments it receives.
+//
+// Example:
+//
+//	greet := func(greeting, name string) string { return greeting + " " + name }
+//	sayHello := Partial2(greet, "Hello")
+//	result := sayHello("World") // "Hello World"
+func Partial2[T1, T2, R any](fn func(T1, T2) R, arg1 T1) func(T2) R {
+	return func(arg2 T2) R {
+		return fn(arg1, arg2)
+	}
+}
+
+// Partial3 creates a function that invokes func with partials prepended to the arguments it receives.
+//
+// Example:
+//
+//	add3 := func(a, b, c int) int { return a + b + c }
+//	addToFive := Partial3(add3, 2, 3)
+//	result := addToFive(4) // 9
+func Partial3[T1, T2, T3, R any](fn func(T1, T2, T3) R, arg1 T1, arg2 T2) func(T3) R {
+	return func(arg3 T3) R {
+		return fn(arg1, arg2, arg3)
+	}
+}
+
+// Partial4 creates a function that invokes func with partials prepended to the arguments it receives.
+//
+// Example:
+//
+//	add4 := func(a, b, c, d int) int { return a + b + c + d }
+//	addToSix := Partial4(add4, 1, 2, 3)
+//	result := addToSix(4) // 10
+func Partial4[T1, T2, T3, T4, R any](fn func(T1, T2, T3, T4) R, arg1 T1, arg2 T2, arg3 T3) func(T4) R {
+	return func(arg4 T4) R {
+		return fn(arg1, arg2, arg3, arg4)
+	}
+}
+
+// Flip creates a function that invokes func with arguments flipped.
+//
+// Example:
+//
+//	divide := func(a, b float64) float64 { return a / b }
+//	flippedDivide := Flip2(divide)
+//	result := flippedDivide(2, 10) // 10 / 2 = 5
+func Flip2[T1, T2, R any](fn func(T1, T2) R) func(T2, T1) R {
+	return func(arg2 T2, arg1 T1) R {
+		return fn(arg1, arg2)
+	}
+}
+
+// Flip3 creates a function that invokes func with arguments flipped.
+//
+// Example:
+//
+//	subtract := func(a, b, c int) int { return a - b - c }
+//	flippedSubtract := Flip3(subtract)
+//	result := flippedSubtract(1, 2, 10) // 10 - 2 - 1 = 7
+func Flip3[T1, T2, T3, R any](fn func(T1, T2, T3) R) func(T3, T2, T1) R {
+	return func(arg3 T3, arg2 T2, arg1 T1) R {
+		return fn(arg1, arg2, arg3)
+	}
+}
+
+// Rearg2 creates a function that invokes func with arguments arranged according to the specified indexes.
+//
+// Example:
+//
+//	greet := func(greeting, name string) string { return greeting + " " + name }
+//	reordered := Rearg2(greet, 1, 0) // Swap arguments
+//	result := reordered("World", "Hello") // "Hello World"
+func Rearg2[T1, T2, R any](fn func(T1, T2) R, index1, index2 int) func(T1, T2) R {
+	return func(arg1 T1, arg2 T2) R {
+		args := []interface{}{arg1, arg2}
+		if index1 == 0 && index2 == 1 {
+			return fn(args[0].(T1), args[1].(T2))
+		} else if index1 == 1 && index2 == 0 {
+			return fn(args[1].(T1), args[0].(T2))
+		}
+		// Default case
+		return fn(arg1, arg2)
+	}
+}
+
+// Ary creates a function that invokes func with up to n arguments, ignoring any additional arguments.
+//
+// Example:
+//
+//	sum := func(args ...int) int {
+//		total := 0
+//		for _, v := range args { total += v }
+//		return total
+//	}
+//	sumTwo := Ary(sum, 2)
+//	result := sumTwo(1, 2, 3, 4, 5) // Only uses first 2 arguments: 1 + 2 = 3
+func Ary(fn func(...interface{}) interface{}, n int) func(...interface{}) interface{} {
+	return func(args ...interface{}) interface{} {
+		if len(args) > n {
+			args = args[:n]
+		}
+		return fn(args...)
+	}
+}
+
+// Unary creates a function that accepts up to one argument, ignoring any additional arguments.
+//
+// Example:
+//
+//	parseIntFunc := func(s string, base int) int {
+//		// Simplified parseInt
+//		if s == "10" { return 10 }
+//		return 0
+//	}
+//	unaryParseInt := Unary2(parseIntFunc)
+//	result := unaryParseInt("10") // Only uses first argument
+func Unary2[T1, T2, R any](fn func(T1, T2) R, defaultArg2 T2) func(T1) R {
+	return func(arg1 T1) R {
+		return fn(arg1, defaultArg2)
+	}
+}

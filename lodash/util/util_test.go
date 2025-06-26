@@ -404,3 +404,291 @@ func TestToPath(t *testing.T) {
 		})
 	}
 }
+
+func TestSample(t *testing.T) {
+	collection := []int{1, 2, 3, 4, 5}
+
+	// Test that sample returns an element from the collection
+	result := Sample(collection)
+	found := false
+	for _, v := range collection {
+		if v == result {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("Sample() returned %v which is not in collection %v", result, collection)
+	}
+
+	// Test empty collection
+	emptyResult := Sample([]int{})
+	if emptyResult != 0 {
+		t.Errorf("Sample() on empty collection should return zero value, got %v", emptyResult)
+	}
+}
+
+func TestSampleSize(t *testing.T) {
+	collection := []int{1, 2, 3, 4, 5}
+
+	// Test normal case
+	result := SampleSize(collection, 3)
+	if len(result) != 3 {
+		t.Errorf("SampleSize() should return 3 elements, got %d", len(result))
+	}
+
+	// Check all elements are from original collection
+	for _, v := range result {
+		found := false
+		for _, orig := range collection {
+			if v == orig {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("SampleSize() returned %v which is not in original collection", v)
+		}
+	}
+
+	// Test size larger than collection
+	largeResult := SampleSize(collection, 10)
+	if len(largeResult) != len(collection) {
+		t.Errorf("SampleSize() with size > collection should return all elements, got %d", len(largeResult))
+	}
+
+	// Test zero size
+	zeroResult := SampleSize(collection, 0)
+	if len(zeroResult) != 0 {
+		t.Errorf("SampleSize() with size 0 should return empty slice, got %v", zeroResult)
+	}
+
+	// Test empty collection
+	emptyResult := SampleSize([]int{}, 3)
+	if len(emptyResult) != 0 {
+		t.Errorf("SampleSize() on empty collection should return empty slice, got %v", emptyResult)
+	}
+}
+
+func TestShuffle(t *testing.T) {
+	collection := []int{1, 2, 3, 4, 5}
+
+	result := Shuffle(collection)
+
+	// Check length is preserved
+	if len(result) != len(collection) {
+		t.Errorf("Shuffle() should preserve length, got %d, want %d", len(result), len(collection))
+	}
+
+	// Check all elements are preserved
+	for _, v := range collection {
+		found := false
+		for _, shuffled := range result {
+			if v == shuffled {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Shuffle() lost element %v", v)
+		}
+	}
+
+	// Check original is not modified
+	originalSum := 0
+	for _, v := range collection {
+		originalSum += v
+	}
+	if originalSum != 15 { // 1+2+3+4+5
+		t.Errorf("Shuffle() modified original collection")
+	}
+
+	// Test empty collection
+	emptyResult := Shuffle([]int{})
+	if len(emptyResult) != 0 {
+		t.Errorf("Shuffle() on empty collection should return empty slice, got %v", emptyResult)
+	}
+
+	// Test single element
+	singleResult := Shuffle([]int{42})
+	if len(singleResult) != 1 || singleResult[0] != 42 {
+		t.Errorf("Shuffle() on single element should return [42], got %v", singleResult)
+	}
+}
+
+func TestSize(t *testing.T) {
+	tests := []struct {
+		name       string
+		collection interface{}
+		expected   int
+	}{
+		{
+			name:       "slice",
+			collection: []int{1, 2, 3},
+			expected:   3,
+		},
+		{
+			name:       "string",
+			collection: "hello",
+			expected:   5,
+		},
+		{
+			name:       "map",
+			collection: map[string]int{"a": 1, "b": 2},
+			expected:   2,
+		},
+		{
+			name:       "empty slice",
+			collection: []int{},
+			expected:   0,
+		},
+		{
+			name:       "empty string",
+			collection: "",
+			expected:   0,
+		},
+		{
+			name:       "empty map",
+			collection: map[string]int{},
+			expected:   0,
+		},
+		{
+			name:       "nil",
+			collection: nil,
+			expected:   0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := Size(tt.collection)
+			if result != tt.expected {
+				t.Errorf("Size() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestProperty(t *testing.T) {
+	object := map[string]interface{}{
+		"a": map[string]interface{}{
+			"b": 2,
+		},
+		"c": 3,
+	}
+
+	// Test simple property
+	getC := Property("c")
+	result := getC(object)
+	if result != 3 {
+		t.Errorf("Property('c') = %v, want 3", result)
+	}
+
+	// Test nested property
+	getB := Property("a.b")
+	result2 := getB(object)
+	if result2 != 2 {
+		t.Errorf("Property('a.b') = %v, want 2", result2)
+	}
+
+	// Test non-existent property
+	getNonExistent := Property("x.y")
+	result3 := getNonExistent(object)
+	if result3 != nil {
+		t.Errorf("Property('x.y') = %v, want nil", result3)
+	}
+}
+
+func TestPropertyOf(t *testing.T) {
+	object := map[string]interface{}{
+		"a": map[string]interface{}{
+			"b": 2,
+		},
+		"c": 3,
+	}
+
+	getValue := PropertyOf(object)
+
+	// Test simple property
+	result := getValue("c")
+	if result != 3 {
+		t.Errorf("PropertyOf(object)('c') = %v, want 3", result)
+	}
+
+	// Test nested property
+	result2 := getValue("a.b")
+	if result2 != 2 {
+		t.Errorf("PropertyOf(object)('a.b') = %v, want 2", result2)
+	}
+
+	// Test non-existent property
+	result3 := getValue("x.y")
+	if result3 != nil {
+		t.Errorf("PropertyOf(object)('x.y') = %v, want nil", result3)
+	}
+}
+
+func TestMatches(t *testing.T) {
+	objects := []map[string]interface{}{
+		{"a": 1, "b": 2, "c": 3},
+		{"a": 1, "b": 3, "c": 4},
+		{"a": 2, "b": 2, "c": 5},
+	}
+
+	// Test single property match
+	predicate := Matches(map[string]interface{}{"a": 1})
+
+	matches := []map[string]interface{}{}
+	for _, obj := range objects {
+		if predicate(obj) {
+			matches = append(matches, obj)
+		}
+	}
+
+	if len(matches) != 2 {
+		t.Errorf("Matches({'a': 1}) should match 2 objects, got %d", len(matches))
+	}
+
+	// Test multiple property match
+	predicate2 := Matches(map[string]interface{}{"a": 1, "b": 2})
+
+	matches2 := []map[string]interface{}{}
+	for _, obj := range objects {
+		if predicate2(obj) {
+			matches2 = append(matches2, obj)
+		}
+	}
+
+	if len(matches2) != 1 {
+		t.Errorf("Matches({'a': 1, 'b': 2}) should match 1 object, got %d", len(matches2))
+	}
+
+	// Test no match
+	predicate3 := Matches(map[string]interface{}{"a": 99})
+
+	matches3 := []map[string]interface{}{}
+	for _, obj := range objects {
+		if predicate3(obj) {
+			matches3 = append(matches3, obj)
+		}
+	}
+
+	if len(matches3) != 0 {
+		t.Errorf("Matches({'a': 99}) should match 0 objects, got %d", len(matches3))
+	}
+
+	// Test empty source (should match all)
+	predicate4 := Matches(map[string]interface{}{})
+
+	matches4 := []map[string]interface{}{}
+	for _, obj := range objects {
+		if predicate4(obj) {
+			matches4 = append(matches4, obj)
+		}
+	}
+
+	if len(matches4) != 3 {
+		t.Errorf("Matches({}) should match all 3 objects, got %d", len(matches4))
+	}
+}

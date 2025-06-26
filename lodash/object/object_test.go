@@ -1,6 +1,7 @@
 package object
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"testing"
@@ -869,5 +870,123 @@ func TestIsEqual(t *testing.T) {
 				t.Errorf("IsEqual() = %v, want %v", result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestTransform(t *testing.T) {
+	// Test grouping by value
+	obj := map[string]int{"a": 1, "b": 2, "c": 1}
+	result := Transform(obj, func(result map[string][]string, value int, key string) {
+		valueStr := fmt.Sprintf("%d", value)
+		if result[valueStr] == nil {
+			result[valueStr] = []string{}
+		}
+		result[valueStr] = append(result[valueStr], key)
+	}, map[string][]string{})
+
+	expected := map[string][]string{
+		"1": {"a", "c"},
+		"2": {"b"},
+	}
+
+	// Check that all expected keys exist and have correct values
+	for key, expectedValues := range expected {
+		actualValues, exists := result[key]
+		if !exists {
+			t.Errorf("Transform() missing key %s", key)
+			continue
+		}
+
+		if len(actualValues) != len(expectedValues) {
+			t.Errorf("Transform() key %s has %d values, want %d", key, len(actualValues), len(expectedValues))
+			continue
+		}
+
+		// Check that all expected values are present (order may vary)
+		for _, expectedValue := range expectedValues {
+			found := false
+			for _, actualValue := range actualValues {
+				if actualValue == expectedValue {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("Transform() key %s missing value %s", key, expectedValue)
+			}
+		}
+	}
+}
+
+func TestTransformSlice(t *testing.T) {
+	slice := []int{1, 2, 3, 4}
+	result := TransformSlice(slice, func(result map[string][]int, value int, index int) {
+		key := "even"
+		if value%2 != 0 {
+			key = "odd"
+		}
+		if result[key] == nil {
+			result[key] = []int{}
+		}
+		result[key] = append(result[key], value)
+	}, map[string][]int{})
+
+	expected := map[string][]int{
+		"odd":  {1, 3},
+		"even": {2, 4},
+	}
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("TransformSlice() = %v, want %v", result, expected)
+	}
+}
+
+func TestInvertBy(t *testing.T) {
+	obj := map[string]int{"a": 1, "b": 2, "c": 1}
+
+	result := InvertBy(obj, func(value int) string {
+		return fmt.Sprintf("group_%d", value)
+	})
+
+	expected := map[string][]string{
+		"group_1": {"a", "c"},
+		"group_2": {"b"},
+	}
+
+	// Check that all expected keys exist and have correct values
+	for key, expectedValues := range expected {
+		actualValues, exists := result[key]
+		if !exists {
+			t.Errorf("InvertBy() missing key %s", key)
+			continue
+		}
+
+		if len(actualValues) != len(expectedValues) {
+			t.Errorf("InvertBy() key %s has %d values, want %d", key, len(actualValues), len(expectedValues))
+			continue
+		}
+
+		// Check that all expected values are present (order may vary)
+		for _, expectedValue := range expectedValues {
+			found := false
+			for _, actualValue := range actualValues {
+				if actualValue == expectedValue {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("InvertBy() key %s missing value %s", key, expectedValue)
+			}
+		}
+	}
+
+	// Test empty object
+	emptyResult := InvertBy(map[string]int{}, func(value int) string {
+		return fmt.Sprintf("group_%d", value)
+	})
+
+	if len(emptyResult) != 0 {
+		t.Errorf("InvertBy() on empty object should return empty map, got %v", emptyResult)
 	}
 }

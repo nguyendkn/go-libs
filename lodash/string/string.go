@@ -634,3 +634,105 @@ func StartCase(s string) string {
 
 	return result.String()
 }
+
+// ParseInt converts string to an integer of the specified radix. If radix is undefined or 0, a radix of 10 is used unless the value is a hexadecimal, in which case a radix of 16 is used.
+//
+// Example:
+//
+//	ParseInt("08") // 8
+//	ParseInt("10", 2) // 2 (binary)
+//	ParseInt("ff", 16) // 255 (hexadecimal)
+//	ParseInt("0x10") // 16 (auto-detect hex)
+func ParseInt(str string, radix ...int) int64 {
+	if str == "" {
+		return 0
+	}
+
+	// Trim whitespace
+	str = strings.TrimSpace(str)
+	if str == "" {
+		return 0
+	}
+
+	// Determine radix
+	base := 10
+	if len(radix) > 0 && radix[0] != 0 {
+		base = radix[0]
+		if base < 2 || base > 36 {
+			return 0 // Invalid radix
+		}
+	}
+
+	// Handle sign
+	negative := false
+	if strings.HasPrefix(str, "-") {
+		negative = true
+		str = str[1:]
+	} else if strings.HasPrefix(str, "+") {
+		str = str[1:]
+	}
+
+	// Auto-detect hexadecimal if radix is 0 or 16
+	if (base == 10 || base == 16) && (strings.HasPrefix(str, "0x") || strings.HasPrefix(str, "0X")) {
+		base = 16
+		str = str[2:]
+	}
+
+	// Parse the number
+	var result int64
+	for _, char := range str {
+		var digit int
+
+		if char >= '0' && char <= '9' {
+			digit = int(char - '0')
+		} else if char >= 'a' && char <= 'z' {
+			digit = int(char - 'a' + 10)
+		} else if char >= 'A' && char <= 'Z' {
+			digit = int(char - 'A' + 10)
+		} else {
+			// Invalid character, stop parsing
+			break
+		}
+
+		if digit >= base {
+			// Invalid digit for this base, stop parsing
+			break
+		}
+
+		result = result*int64(base) + int64(digit)
+	}
+
+	if negative {
+		result = -result
+	}
+
+	return result
+}
+
+// Replace replaces matches for pattern in string with replacement.
+//
+// Example:
+//
+//	Replace("Hi Fred", "Fred", "Barney") // "Hi Barney"
+//	Replace("hello world", "world", "Go") // "hello Go"
+func Replace(str, pattern, replacement string) string {
+	if str == "" || pattern == "" {
+		return str
+	}
+
+	return strings.Replace(str, pattern, replacement, 1) // Replace only first occurrence
+}
+
+// ReplaceAll replaces all matches for pattern in string with replacement.
+//
+// Example:
+//
+//	ReplaceAll("hello hello", "hello", "hi") // "hi hi"
+//	ReplaceAll("foo bar foo", "foo", "baz") // "baz bar baz"
+func ReplaceAll(str, pattern, replacement string) string {
+	if str == "" || pattern == "" {
+		return str
+	}
+
+	return strings.ReplaceAll(str, pattern, replacement)
+}
