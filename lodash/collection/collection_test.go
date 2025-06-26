@@ -546,3 +546,105 @@ func TestFindLast(t *testing.T) {
 		})
 	}
 }
+
+func TestFlatMapDeep(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    [][]int
+		mapper   func([]int) interface{}
+		expected []interface{}
+	}{
+		{
+			name:  "basic flat map deep",
+			slice: [][]int{{1, 2}, {3, 4}},
+			mapper: func(x []int) interface{} {
+				return [][]int{x, x} // Create nested structure
+			},
+			expected: []interface{}{1, 2, 1, 2, 3, 4, 3, 4},
+		},
+		{
+			name:  "single level flattening",
+			slice: [][]int{{1, 2}, {3, 4}},
+			mapper: func(x []int) interface{} {
+				return x // Return as-is
+			},
+			expected: []interface{}{1, 2, 3, 4},
+		},
+		{
+			name:  "mixed types",
+			slice: [][]int{{1}, {2}},
+			mapper: func(x []int) interface{} {
+				return []interface{}{x[0], []int{x[0] * 2}}
+			},
+			expected: []interface{}{1, 2, 2, 4},
+		},
+		{
+			name:  "empty slice",
+			slice: [][]int{},
+			mapper: func(x []int) interface{} {
+				return x
+			},
+			expected: []interface{}{},
+		},
+		{
+			name:  "empty inner slices",
+			slice: [][]int{{}, {}},
+			mapper: func(x []int) interface{} {
+				return x
+			},
+			expected: []interface{}{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FlatMapDeep(tt.slice, tt.mapper)
+			// Handle empty slice comparison
+			if len(result) == 0 && len(tt.expected) == 0 {
+				return // Both are empty, test passes
+			}
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("FlatMapDeep() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFlatMapDeepString(t *testing.T) {
+	tests := []struct {
+		name     string
+		slice    []string
+		mapper   func(string) interface{}
+		expected []interface{}
+	}{
+		{
+			name:  "string to nested structure",
+			slice: []string{"hello", "world"},
+			mapper: func(s string) interface{} {
+				return []interface{}{s, []string{s}}
+			},
+			expected: []interface{}{"hello", "hello", "world", "world"},
+		},
+		{
+			name:  "string to characters",
+			slice: []string{"ab", "cd"},
+			mapper: func(s string) interface{} {
+				chars := make([]string, len(s))
+				for i, c := range s {
+					chars[i] = string(c)
+				}
+				return chars
+			},
+			expected: []interface{}{"a", "b", "c", "d"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FlatMapDeep(tt.slice, tt.mapper)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("FlatMapDeep() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}

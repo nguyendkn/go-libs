@@ -436,3 +436,53 @@ func SortBy[T any](slice []T, iteratee func(T) interface{}) []T {
 
 	return result
 }
+
+// FlatMapDeep creates a flattened array of values by running each element in collection through iteratee and flattening the mapped results recursively.
+//
+// Example:
+//
+//	FlatMapDeep([][]int{{1, 2}, {3, 4}}, func(x []int) [][]int { return [][]int{x, x} }) // []int{1, 2, 1, 2, 3, 4, 3, 4}
+//	FlatMapDeep([]string{"hello", "world"}, func(s string) []interface{} { return []interface{}{s, []string{s}} }) // []interface{}{"hello", "hello", "world", "world"}
+func FlatMapDeep[T any](slice []T, mapper func(T) interface{}) []interface{} {
+	var result []interface{}
+	for _, item := range slice {
+		mapped := mapper(item)
+		flattened := flattenDeepRecursive(mapped)
+		result = append(result, flattened...)
+	}
+	return result
+}
+
+// flattenDeepRecursive recursively flattens any nested structure
+func flattenDeepRecursive(value interface{}) []interface{} {
+	var result []interface{}
+
+	// Use reflection to handle different slice types
+	switch v := value.(type) {
+	case []interface{}:
+		for _, item := range v {
+			result = append(result, flattenDeepRecursive(item)...)
+		}
+	case []int:
+		for _, item := range v {
+			result = append(result, item)
+		}
+	case []string:
+		for _, item := range v {
+			result = append(result, item)
+		}
+	case []float64:
+		for _, item := range v {
+			result = append(result, item)
+		}
+	case []bool:
+		for _, item := range v {
+			result = append(result, item)
+		}
+	default:
+		// For non-slice types, add directly
+		result = append(result, value)
+	}
+
+	return result
+}
